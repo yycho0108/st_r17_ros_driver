@@ -1,4 +1,5 @@
-# Created by https://www.gitignore.io/api/c,ros,git,c++,linux,python
+
+# Created by https://www.gitignore.io/api/c,git,vim,ros,linux,python
 
 ### C ###
 # Prerequisites
@@ -53,25 +54,6 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
-
-### C++ ###
-# Prerequisites
-
-# Compiled Object files
-*.slo
-
-# Precompiled Headers
-
-# Compiled Dynamic libraries
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-
-# Executables
 
 ### Git ###
 *.orig
@@ -133,6 +115,7 @@ htmlcov/
 .coverage
 .coverage.*
 .cache
+.pytest_cache/
 nosetests.xml
 coverage.xml
 *.cover
@@ -141,10 +124,6 @@ coverage.xml
 # Translations
 *.mo
 *.pot
-
-# Django stuff:
-*.log
-local_settings.py
 
 # Flask stuff:
 instance/
@@ -239,5 +218,16 @@ qtcreator-*
 # Catkin custom files
 CATKIN_IGNORE
 
+### Vim ###
+# swap
+.sw[a-p]
+.*.sw[a-p]
+# session
+Session.vim
+# temporary
+.netrwhist
+# auto-generated tag files
+tags
 
-# End of https://www.gitignore.io/api/c,ros,git,c++,linux,python
+
+# End of https://www.gitignore.io/api/c,git,vim,ros,linux,python

@@ -1,0 +1,5 @@
+<launch>
+	<node name="st_r17_move_group_interface" pkg="st_r17_moveit_config" type="st_r17_move_group_interface" output="screen">
+		<remap from="joint_states" to="/st_r17/joint_states"/>
+	</node>
+</launch>

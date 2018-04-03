@@ -1,0 +1,1 @@
+rosrun moveit_kinematics create_ikfast_moveit_plugin.py st_r17 arm_group st_r17_ikfast_plugin /home/jamie/catkin_ws/src/st_r17_ros_driver/st_r17_ikfast_plugin/src/st_r17_arm_group_ikfast_solver.cpp
