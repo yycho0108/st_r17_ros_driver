@@ -87,9 +87,7 @@
 			effort="1000.0"
 			lower="-3.1"
 			upper="3.1"
-			velocity="2.6"
-			/>
-		<!-- 150 deg/sec -->
+			velocity="2.6" />
 		<origin
 			xyz="0 0 0.033268"
 			rpy="-6.123E-17 0 0" />
@@ -145,18 +143,8 @@
 		type="continuous">
 		<limit
 			effort="1000.0"
-			velocity="1.57"
-			/>
+			velocity="1.57" />
 		<!-- 150 deg/sec -->
-		<origin
-			xyz="0 0 0.033268"
-			rpy="-6.123E-17 0 0" />
-		<parent
-			link="base_link" />
-		<child
-			link="link_1" />
-		<axis
-			xyz="0 0 -1" />
 		<origin
 			xyz="0 0 0.32173"
 			rpy="1.5708 1.5708 3.1416" />
@@ -166,6 +154,7 @@
 			link="link_2" />
 		<axis
 			xyz="0 0 1" />
+
 	</joint>
 	<link
 		name="link_3">
