@@ -50,9 +50,9 @@
     <!--   <doc_depend>doxygen</doc_depend> -->
     <buildtool_depend>catkin</buildtool_depend>
 
-    <build_depend>st_r17_description</build_depend>
-    <build_depend>st_r17_moveit_config</build_depend>
-    <build_depend>st_r17_ikfast_plugin</build_depend>
+    <exec_depend>st_r17_description</exec_depend>
+    <exec_depend>st_r17_moveit_config</exec_depend>
+    <exec_depend>st_r17_ikfast_plugin</exec_depend>
 
 
     <!-- The export tag contains other, unspecified, tags -->

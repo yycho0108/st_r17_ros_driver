@@ -139,7 +139,7 @@ int main(int argc, char* argv[]){
 	ros::NodeHandle nh_priv("~");
 
 	std::string dev;
-	nh_priv.param("/dev", dev, std::string("/dev/ttyUSB0")); 
+	nh_priv.param("dev", dev, std::string("/dev/ttyUSB0")); 
 	ROS_INFO("Get Param %s", ros::param::get("/dev", dev)?"SUCCEEDED":"FAILED");
 	ROS_INFO("initialized with device %s", dev.c_str());
 
