@@ -8,7 +8,6 @@
     <!-- By default, we are not in debug mode -->
     <arg name="debug" default="false" />
     <arg name="sim" default="true" />
-    <arg name="fake" default="false" />
 
     <!-- Load the URDF, SRDF and other .yaml configuration files on the param server -->
     <include file="$(find st_r17_moveit_config)/launch/planning_context.launch">
@@ -38,7 +37,7 @@
     <!-- Move Group -->
     <include file="$(find st_r17_moveit_config)/launch/move_group.launch">
         <arg name="allow_trajectory_execution" value="true"/>
-        <arg name="fake_execution" value="$(arg fake)"/>
+        <arg name="fake_execution" value="$(arg sim)"/>
         <arg name="info" value="true"/>
         <arg name="debug" value="$(arg debug)"/>
     </include>
