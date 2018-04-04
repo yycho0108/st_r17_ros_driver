@@ -83,7 +83,13 @@
 	<joint
 		name="waist"
 		type="revolute">
-		<limit effort="1000.0" lower="-3.1" upper="3.1" velocity="0.5"/>
+		<limit
+			effort="1000.0"
+			lower="-3.1"
+			upper="3.1"
+			velocity="2.6"
+			/>
+		<!-- 150 deg/sec -->
 		<origin
 			xyz="0 0 0.033268"
 			rpy="-6.123E-17 0 0" />
@@ -137,6 +143,20 @@
 	<joint
 		name="shoulder"
 		type="continuous">
+		<limit
+			effort="1000.0"
+			velocity="1.57"
+			/>
+		<!-- 150 deg/sec -->
+		<origin
+			xyz="0 0 0.033268"
+			rpy="-6.123E-17 0 0" />
+		<parent
+			link="base_link" />
+		<child
+			link="link_1" />
+		<axis
+			xyz="0 0 -1" />
 		<origin
 			xyz="0 0 0.32173"
 			rpy="1.5708 1.5708 3.1416" />
@@ -190,6 +210,12 @@
 	<joint
 		name="elbow"
 		type="continuous">
+		
+		<limit
+			effort="1000.0"
+			velocity="2.26"
+			/>
+
 		<origin
 			xyz="-0.375 0 0"
 			rpy="0 0 -1.1442E-17" />
@@ -243,6 +269,12 @@
 	<joint
 		name="hand"
 		type="continuous">
+		
+		<limit
+			effort="1000.0"
+			velocity="5.58"
+			/>
+
 		<origin
 			xyz="-0.375 0 0"
 			rpy="3.1416 0 3.1416" />
@@ -296,6 +328,10 @@
 	<joint
 		name="wrist"
 		type="continuous">
+		<limit
+			effort="1000.0"
+			velocity="5.58"
+			/>
 		<origin
 			xyz="0.042405 0 -0.0244"
 			rpy="-1.9635 6.137E-31 -1.6653E-16" />
