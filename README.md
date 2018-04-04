@@ -10,22 +10,22 @@ The CAD design files are available [here]().
 ([Reference](http://docs.ros.org/kinetic/api/moveit_tutorials/html/doc/ikfast_tutorial.html))
 
 ```bash
-# format collada ...
-openrave-robot.py ...
-
-IKOUT=/tmp/ik.cpp
-python $(openrave-config --python-dir)/openravepy/_openravepy_/ikfast.py --robot=$(rospack find st_r17_description)/urdf/robot_3.dae --iktype=translationdirection5d --baselink=0 --eelink=6 --savefile=${IKOUT}
+roscd st_r17_ikfast_plugin
+# options : decimal rounding
+./generate_ikfast_solver.sh
 ```
 
-### Simulation Dmo
+### Simulation Demo
 
 ```bash
 roslaunch st_r17_moveit_config demo.launch 
+roslaunch st_r17_moveit_config move_group_interface.launch
 ```
 
 ### Hardware Demo
 
 ```bash
 roslaunch st_r17_moveit_config hardware.launch
-roslaunch st_r17_moveit_config real.launch
+roslaunch st_r17_moveit_config demo.launch sim:=false
+roslaunch st_r17_moveit_config move_group_interface.launch
 ```
