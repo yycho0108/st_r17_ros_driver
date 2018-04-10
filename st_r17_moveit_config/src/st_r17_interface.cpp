@@ -139,7 +139,11 @@ int main(int argc, char* argv[]){
 	ros::NodeHandle nh_priv("~");
 
 	std::string dev;
+    float rate;
+
 	nh_priv.param("dev", dev, std::string("/dev/ttyUSB0")); 
+    nh_priv.param("rate", rate, 10.0f);
+
 	ROS_INFO("Get Param %s", ros::param::get("/dev", dev)?"SUCCEEDED":"FAILED");
 	ROS_INFO("initialized with device %s", dev.c_str());
 
@@ -150,7 +154,7 @@ int main(int argc, char* argv[]){
 	spinner.start();
 
 	ros::Time then = st_r17.get_time();
-	ros::Rate r = ros::Rate(10.0); // 10 Hz
+	ros::Rate r = ros::Rate(rate); // 10 Hz
 
 	while(ros::ok()){
 		ros::Time now = st_r17.get_time();

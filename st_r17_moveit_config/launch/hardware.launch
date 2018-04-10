@@ -1,6 +1,8 @@
 <launch>
 	<arg name="dev" default="/dev/ttyUSB0"/>
+    <arg name="rate" default="10.0"/>
 	<node name="st_r17_hardware_node" pkg="st_r17_moveit_config" type="st_r17_hardware_node" ns="st_r17" output="screen">
         <param name="dev" value="$(arg dev)"/>
+        <param name="rate" value="$(arg rate)"/>
 	</node>
 </launch>

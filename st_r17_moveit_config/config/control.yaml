@@ -8,6 +8,19 @@ st_r17:
             - elbow
             - hand
             - wrist
+        constraints:
+            goal_time: 5.0
+            waist:
+                goal: 1.0
+            shoulder:
+                goal: 1.0
+            elbow:
+                goal: 1.0
+            hand:
+                goal: 1.0
+            wrist:
+                goal: 1.0
+
     joint_state_controller:
         type: joint_state_controller/JointStateController
         publish_rate: 50
@@ -23,3 +36,15 @@ controller_list:
         - elbow
         - hand
         - wrist
+    constraints:
+        goal_time: 5.0
+        waist:
+            goal: 1.0
+        shoulder:
+            goal: 1.0
+        elbow:
+            goal: 1.0
+        hand:
+            goal: 1.0
+        wrist:
+            goal: 1.0
