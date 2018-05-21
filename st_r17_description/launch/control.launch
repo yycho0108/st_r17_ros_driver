@@ -1,0 +1,5 @@
+<launch>
+    <!-- controller -->
+    <rosparam command="load" file="$(find st_r17_moveit_config)/config/control.yaml"/>
+    <node name="controller_spawner" pkg="controller_manager" type="spawner" output="screen" ns="/st_r17" args="st_r17_controller joint_state_controller"/>
+</launch>
