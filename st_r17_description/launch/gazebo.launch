@@ -2,7 +2,7 @@
 	<include file="$(find gazebo_ros)/launch/empty_world.launch" />
 
 	<param name="robot_description"
-		textfile="$(find st_r17_description)/urdf/robot_3.urdf" />
+		textfile="$(find st_r17_description)/urdf/robot.urdf" />
 
 	<node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen" args="-urdf -model st_r17 -param robot_description" />
 

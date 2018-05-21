@@ -157,6 +157,7 @@ int main(int argc, char* argv[]){
 	ros::Rate r = ros::Rate(rate); // 10 Hz
 
 	while(ros::ok()){
+        ROS_INFO_THROTTLE(5.0, "ALIVE");
 		ros::Time now = st_r17.get_time();
 		ros::Duration period = ros::Duration(now-then);
         then = now;

@@ -1,10 +1,5 @@
 <launch>
 
-    <!-- By default, we do not start a database (it can be large) -->
-    <arg name="db" default="false" />
-    <!-- Allow user to specify database location -->
-    <arg name="db_path" default="$(find st_r17_moveit_config)/default_warehouse_mongo_db" />
-
     <!-- By default, we are not in debug mode -->
     <arg name="debug" default="false" />
     <arg name="sim" default="true" />
@@ -27,7 +22,7 @@
 
     <!-- Given the published joint states, publish tf for the robot links -->
     <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" respawn="true" output="screen">
-        <remap from="joint_states" to="st_r17/joint_states"/>
+        <remap from="joint_states" to="/st_r17/joint_states"/>
     </node>
 
     <!-- controller -->
@@ -45,14 +40,14 @@
 
     <!-- Run Rviz and load the default config to see the state of the move_group node -->
     <include file="$(find st_r17_moveit_config)/launch/moveit_rviz.launch">
+        <arg name="file" value="$(find st_r17_moveit_config)/config/stereo.rviz"/>
         <arg name="debug" value="$(arg debug)"/>
     </include>
 
-    <!-- If database loading was enabled, start mongodb as well -->
-    <!--
-  <include file="$(find st_r17_moveit_config)/launch/default_warehouse_db.launch" if="$(arg db)">
-    <arg name="moveit_warehouse_database_path" value="$(arg db_path)"/>
-  </include>
-  -->
+    <!-- Setup Camera TFs -->
+    <group unless="$(arg sim)">
+        <node pkg="tf" type="static_transform_publisher" args="0 0.0315 0 0 0 0 jaw_link camera_ros 100"/>
+        <node pkg="tf" type="static_transform_publisher" args="0 0 0 -1.57 0 -1.57 camera_ros camera 100"/><!-- optical -->
+    </group>
 
 </launch>
