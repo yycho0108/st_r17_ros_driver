@@ -1,9 +1,16 @@
 <launch>
 	<arg name="model" />
 	<arg name="gui" default="False" />
-	<param name="robot_description" textfile="$(find st_r17_description)/urdf/robot.urdf" />
-	<param name="use_gui" value="$(arg gui)" />
-	<node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
-	<node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher" />
+    <arg name="use_kinect" default="true"/>
+
+    <!--<param name="robot_description" textfile="$(find st_r17_description)/urdf/robot.urdf" />-->
+    <!--<node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher" />-->
+
+    <include file="$(find st_r17_description)/launch/urdf.launch">
+        <arg name="use_kinect" value="$(arg use_kinect)"/>
+    </include>
+	<node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" >
+        <param name="use_gui" value="$(arg gui)" />
+    </node>
 	<node name="rviz" pkg="rviz" type="rviz" args="-d $(find st_r17_description)/rviz/urdf.rviz" />
 </launch>

@@ -1,0 +1,9 @@
+<launch>
+    <arg name="ns" default="/"/>
+    <arg name="use_kinect" default="true"/>
+    <param name="robot_description"
+        command="$(find xacro)/xacro '$(find st_r17_description)/urdf/robot.urdf.xacro' use_kinect:=$(arg use_kinect) --inorder" />
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" respawn="true" output="screen">
+        <remap from="joint_states" to="$(arg ns)/joint_states"/>
+    </node>
+</launch>
