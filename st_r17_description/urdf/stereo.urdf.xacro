@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro" name="stereo">
+    <xacro:include filename="$(find st_r17_description)/urdf/camera.urdf.xacro"/>
+    <xacro:macro name="stereo" params="baseline parent">
+        <xacro:cam prefix="left" parent="${parent}">
+            <origin xyz="0 ${baseline/2} 0" rpy="0 0 0"/>
+        </xacro:cam>
+        <xacro:cam prefix="right" parent="${parent}" baseline="${baseline}">
+            <origin xyz="0 -${baseline/2} 0" rpy="0 0 0"/>
+        </xacro:cam>
+    </xacro:macro>
+</robot>
+

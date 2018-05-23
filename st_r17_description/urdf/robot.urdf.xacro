@@ -1,6 +1,9 @@
 <robot name="st_r17" xmlns:xacro="http://ros.org/wiki/xacro">
+	<xacro:include filename="$(find st_r17_description)/urdf/stereo.urdf.xacro"/>
+
 	<xacro:property name="deg" value="${pi/180.0}"/>
     <xacro:arg name="use_kinect" default="true"/>
+    <xacro:arg name="use_stereo" default="true"/>
 
 	<xacro:macro name="box_inertia" params="x y z mass">
 		<inertia ixx="${0.0833333 * mass * (y*y + z*z)}" ixy="0.0" ixz="0.0"
@@ -444,6 +447,18 @@
             <robotSimType>gazebo_ros_control/DefaultRobotHWSim</robotSimType>
         </plugin>
     </gazebo>
+
+    <!-- Stereo -->
+    <xacro:if value="$(arg use_stereo)">
+        <link name="stereo_link"> </link>
+        <joint name="stereo_joint" type="fixed">
+            <origin xyz="0.15875 0 0.012"/>
+            <parent link="link_5"/>
+            <child link="stereo_link"/>
+            <axis xyz="0 0 1"/>
+        </joint>
+        <xacro:stereo baseline="0.0636" parent="stereo_link"/>
+    </xacro:if>
 
     <!-- Kinect -->
     <xacro:if value="$(arg use_kinect)">
