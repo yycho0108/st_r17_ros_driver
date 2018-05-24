@@ -191,6 +191,7 @@ class DHCalibrator(object):
                 loss_rpy = tf.square(pred_rpy - rpy_avg)
                 loss = loss_xyz + loss_rpy
             else:
+                #loss = tf.square(T - tf.reduce_mean(T, axis=0, keep_dims=True))
                 loss = tf.square(T - tf.expand_dims(T_avg, 0))
             loss = tf.reduce_mean(loss)
             #loss = tf.reduce_sum(loss * vis_f[..., tf.newaxis]) / tf.reduce_sum(vis_f)
