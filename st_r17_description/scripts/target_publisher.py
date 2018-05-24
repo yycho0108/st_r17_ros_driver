@@ -2,8 +2,10 @@
 
 import rospy
 import numpy as np
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseArray
 from sensor_msgs.msg import JointState
+from apriltags_ros.msg import AprilTagDetectionArray, AprilTagDetection
+
 import tf.transformations as tx
 from fk import fk
 
@@ -30,24 +32,19 @@ class SimpleTargetPublisher(object):
                 [np.pi/2, 0, 0.042, 1.176],
                 [0, -0.012, 0.159, np.pi]
                 ]
-        xyz = np.random.uniform(low = -1.0, high = 1.0, size=3)
 
         self._dhs = np.float32(dhs)
         self._rate = rospy.get_param('~rate', default=50)
         self._zero = rospy.get_param('~zero', default=False)
+        self._num_markers = rospy.get_param('~num_markers', default=1)
 
-        x = rospy.get_param('~x', default=xyz[0])
-        y = rospy.get_param('~y', default=xyz[1])
-        z = rospy.get_param('~z', default=xyz[2])
-        x,y,z = [np.round(e, decimals=3) for e in [x,y,z]]
+        xyz = np.random.uniform(low = -1.0, high = 1.0, size=(self._num_markers, 3))
+        self._xyz = xyz
 
-        self._xyz = [x,y,z]
-
-        rospy.loginfo('~xyz : {:.3f}, {:.3f}, {:.3f}'.format(x,y,z))
-
-        self._ppub = rospy.Publisher('/target_pose', PoseStamped, queue_size=10)
+        self._ppub = rospy.Publisher('/target_pose', AprilTagDetectionArray, queue_size=10)
+        self._pvpub = rospy.Publisher('/target_pose_viz', PoseArray, queue_size=10)
         self._jpub = rospy.Publisher('/st_r17/joint_states', JointState, queue_size=10)
-        self._gpub = rospy.Publisher('/ground_truth', PoseStamped, queue_size=10)
+        self._gpub = rospy.Publisher('/ground_truth', AprilTagDetectionArray, queue_size=10)
 
     def publish(self):
         now = rospy.Time.now()
@@ -58,32 +55,46 @@ class SimpleTargetPublisher(object):
         txn, rxn = fk(self._dhs, np.concatenate( [x, [0]] ))
 
         ## base_link --> object
-        M07 = tx.compose_matrix(
-                translate = self._xyz
-                )# T_0_7
+        M07 = [tx.compose_matrix(translate = xyz) for xyz in self._xyz]
 
         ## base_link --> stereo_optical_link
         M06 = tx.compose_matrix(
                 angles = tx.euler_from_quaternion(rxn),
                 translate = txn) # T_0_6
 
-        pmsg = PoseStamped()
-        pmsg.header.frame_id = 'stereo_optical_link'
-        M67 = np.matmul(np.linalg.inv(M06), M07)
-        txn = tx.translation_from_matrix(M67)
-        rxn = tx.quaternion_from_matrix(M67)
-        pmsg.header.stamp = now
+        m_msg = AprilTagDetectionArray()
+        pv_msg = PoseArray()
+        pv_msg.header.stamp = now
+        pv_msg.header.frame_id = 'stereo_optical_link'
 
-        fill_pose_msg(pmsg.pose, txn, rxn)
-        self._ppub.publish(pmsg)
+        M67 = [np.matmul(np.linalg.inv(M06), M) for M in M07]
+        for i in range(self._num_markers):
+            M = M67[i]
+            txn = tx.translation_from_matrix(M)
+            rxn = tx.quaternion_from_matrix(M)
+            
+            msg = AprilTagDetection()
+            msg.id = i
+            msg.size = 0.0 # not really a thing
 
-        gmsg = PoseStamped()
-        gmsg.header.frame_id = 'base_link'
-        txn = tx.translation_from_matrix(M07)
-        rxn = tx.quaternion_from_matrix(M07)
-        gmsg.header.stamp = now
-        fill_pose_msg(gmsg.pose, txn, rxn)
-        self._gpub.publish(gmsg)
+            p_msg = msg.pose
+            p_msg.header.frame_id = 'stereo_optical_link'
+            p_msg.header.stamp = now
+            fill_pose_msg(p_msg.pose, txn, rxn)
+
+            m_msg.detections.append(msg)
+            pv_msg.poses.append(p_msg.pose)
+
+        self._ppub.publish(m_msg)
+        self._pvpub.publish(pv_msg)
+
+        #gmsg = PoseStamped()
+        #gmsg.header.frame_id = 'base_link'
+        #txn = tx.translation_from_matrix(M07)
+        #rxn = tx.quaternion_from_matrix(M07)
+        #gmsg.header.stamp = now
+        #fill_pose_msg(gmsg.pose, txn, rxn)
+        #self._gpub.publish(gmsg)
 
         jmsg = JointState()
         jmsg.header.stamp = now

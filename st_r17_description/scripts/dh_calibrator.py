@@ -13,10 +13,20 @@ from collections import deque, defaultdict
 
 from geometry_msgs.msg import Pose, PoseStamped
 from sensor_msgs.msg import JointState
-from apriltags_ros.msg import AprilTagDetectionArray
+from apriltags_ros.msg import AprilTagDetectionArray, AprilTagDetection
 # using ^ as placeholder for now
 
 eps=np.finfo(float).eps*4.0
+
+def fill_pose_msg(msg, txn, rxn):
+    msg.position.x = txn[0]
+    msg.position.y = txn[1]
+    msg.position.z = txn[2]
+
+    msg.orientation.x = rxn[0]
+    msg.orientation.y = rxn[1]
+    msg.orientation.z = rxn[2]
+    msg.orientation.w = rxn[3]
 
 def T2xyzrpy(T):
     with tf.name_scope('T2xyzrpy', [T]):
@@ -269,6 +279,8 @@ class DHCalibratorROS(object):
         self._sub.registerCallback(self.data_cb)
         self._pub = rospy.Publisher('dh', PoseStamped, queue_size=10)
         self._m2i = defaultdict(lambda : len(self._m2i))
+        self._i2m = {}
+        self._seen = [False for _ in range(self._num_markers)]
 
     def data_cb(self, joint_msg, detection_msgs):
         j = np.concatenate( (joint_msg.position, [0]) ) # assume final joint is fixed
@@ -286,8 +298,10 @@ class DHCalibratorROS(object):
                     translate = [p.x, p.y, p.z]
                     )
             i = self._m2i[m_id] # transform tag id to index
+            self._i2m[i] = m_id
             Xs[i] = X
-            vis[i] = true
+            vis[i] = True
+            self._seen[i] = True
 
         Xs = np.float32(_Xs)
         self._js.append(j)
@@ -296,11 +310,29 @@ class DHCalibratorROS(object):
         rospy.loginfo_throttle(1.0, 'Current Step : {}'.format(self._step))
         
         T = self._calib.eval_1(j, X, vis) # == (1, M, 4, 4)
-        txn = tx.translation_from_matrix(T)
-        rxn = tx.quaternion_from_matrix(T)
         
-        msg = AprilTagDetectionArray()
+        m_msg = AprilTagDetectionArray()
         ## CURRENTLY EDITING HERE
+        now = rospy.Time.now()
+        for i in range(self._num_markers):
+            if self._seen[i]:
+                txn = tx.translation_from_matrix(T[i])
+                rxn = tx.quaternion_from_matrix(T[i])
+
+                msg = AprilTagDetection()
+                msg.id = self._i2m[i]
+                msg.size = 0.0 # not really a thing
+
+                p_msg = PoseStamped()
+                p_msg.header.frame_id = 'base_link'
+                p_msg.header.stamp = now
+                fill_pose_msg(p_msg, txn, rxn)
+
+                msg.pose = p_msg
+
+                m_msg.detections.append(msg)
+        self._pub.publish(m_msg)
+
         #msg = PoseStamped()
         #msg.header.frame_id = 'base_link'
         #msg.header.stamp = rospy.Time.now()
@@ -313,8 +345,7 @@ class DHCalibratorROS(object):
         #msg.pose.orientation.y = rxn[1]
         #msg.pose.orientation.z = rxn[2]
         #msg.pose.orientation.w = rxn[3]
-    
-        self._pub.publish(msg)
+        #self._pub.publish(msg)
 
     def update(self):
         if self._step < self._start_step:
