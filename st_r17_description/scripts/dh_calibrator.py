@@ -191,8 +191,8 @@ class DHCalibrator(object):
                 loss_rpy = tf.square(pred_rpy - rpy_avg)
                 loss = loss_xyz + loss_rpy
             else:
-                #loss = tf.square(T - tf.reduce_mean(T, axis=0, keep_dims=True))
-                loss = tf.square(T - tf.expand_dims(T_avg, 0))
+                loss = tf.square(T - tf.reduce_mean(T, axis=0, keep_dims=True))
+                #loss = tf.square(T - tf.expand_dims(T_avg, 0))
             loss = tf.reduce_mean(loss)
             #loss = tf.reduce_sum(loss * vis_f[..., tf.newaxis]) / tf.reduce_sum(vis_f)
 
@@ -201,7 +201,7 @@ class DHCalibrator(object):
         #loss = tf.reduce_mean(loss)
 
         # build train ...
-        train = tf.train.GradientDescentOptimizer(learning_rate=1e-1).minimize(loss)
+        train = tf.train.GradientDescentOptimizer(learning_rate=1e-2).minimize(loss)
 
         # save ...
         self._T = T
@@ -278,7 +278,7 @@ class DHCalibratorROS(object):
         self._dh0 = np.float32(self._dh0)
         z = np.random.normal(
                 loc = 0.0,
-                scale = [np.deg2rad(3.0), 0.03, 0.03, np.deg2rad(3.0)],
+                scale = [np.deg2rad(1.0), 0.01, 0.01, np.deg2rad(1.0)],
                 size = np.shape(self._dh0)
                 )
         dh0 = np.add(self._dh0, z)

@@ -2,7 +2,7 @@
 
 import rospy
 import numpy as np
-from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, PoseArray
+from geometry_msgs.msg import Pose, PoseStamped, PoseWithCovarianceStamped, PoseArray
 from sensor_msgs.msg import JointState
 from apriltags2_ros.msg import AprilTagDetectionArray, AprilTagDetection
 
@@ -44,7 +44,7 @@ class SimpleTargetPublisher(object):
         self._ppub = rospy.Publisher('/target_pose', AprilTagDetectionArray, queue_size=10)
         self._pvpub = rospy.Publisher('/target_pose_viz', PoseArray, queue_size=10)
         self._jpub = rospy.Publisher('/st_r17/joint_states', JointState, queue_size=10)
-        self._gpub = rospy.Publisher('/ground_truth', AprilTagDetectionArray, queue_size=10)
+        self._gpub = rospy.Publisher('/ground_truth_viz', PoseArray, queue_size=10)
 
     def publish(self):
         now = rospy.Time.now()
@@ -98,6 +98,20 @@ class SimpleTargetPublisher(object):
 
         self._ppub.publish(m_msg)
         self._pvpub.publish(pv_msg)
+
+        gv_msg = PoseArray()
+        gv_msg.header.stamp = now
+        gv_msg.header.frame_id = 'base_link'
+
+        for i in range(self._num_markers):
+            M = M07[i]
+            txn = tx.translation_from_matrix(M)
+            rxn = tx.quaternion_from_matrix(M)
+            
+            pose = Pose()
+            fill_pose_msg(pose, txn, rxn)
+            gv_msg.poses.append(pose)
+        self._gpub.publish(gv_msg)
 
         #gmsg = PoseStamped()
         #gmsg.header.frame_id = 'base_link'
