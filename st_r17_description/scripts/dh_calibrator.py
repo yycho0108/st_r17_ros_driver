@@ -84,16 +84,6 @@ def dh2T(alpha, a, d, q):
         T = tf.transpose(T, [2,0,1]) # --> (N,4,4)
     return T
 
-def get_dh(index, alpha0, a0, d0, q0=0):
-    """ Seed DH Parameters; note q0 is offset joint value. """
-    with tf.variable_scope('DH_{}'.format(index)):
-        alpha = tf.Variable(dtype=tf.float32, initial_value=alpha0, trainable=True, name='alpha'.format(index))
-        a = tf.Variable(dtype=tf.float32, initial_value=a0, trainable=True, name='a'.format(index))
-        d = tf.Variable(dtype=tf.float32, initial_value=d0, trainable=True, name='d'.format(index))
-        dq = tf.Variable(dtype=tf.float32, initial_value=q0, trainable=True, name='dq'.format(index))
-        q = tf.placeholder(dtype=tf.float32, shape=[None], name='q'.format(index))
-    return (alpha, a, d, q+dq), q
-
 """ DH Calibrator """
 class DHCalibrator(object):
     def __init__(self, dh0, m):
@@ -172,7 +162,7 @@ class DHCalibrator(object):
 
                 xyz_avg_u = tf.assign(xyz_avg, new_xyz_avg)
                 rpy_avg_u = tf.assign(rpy_avg, new_xyz_avg)
-                T_avg_u = [xyz_avg_u, rpy_avg_u]
+                T_update = [xyz_avg_u, rpy_avg_u]
         else:
             with tf.name_scope('target_avg'):
                 T_avg = tf.Variable(initial_value = np.zeros(shape=(self._m,4,4)), trainable=False, dtype=np.float32)
@@ -180,12 +170,13 @@ class DHCalibrator(object):
                 #T_avg_1 = tf.reduce_sum(T_avg_1, axis=0) / num_vis[..., tf.newaxis, tf.newaxis]
                 #T_avg_1 = tf.where(vis_sel, T_avg_1, T_avg)
                 T_avg_1 = tf.reduce_mean(T, axis=0)
-                T_avg_u = [tf.assign(T_avg, gamma*T_avg + (1.0-gamma) * T_avg_1)]
+                T_update = [tf.assign(T_avg, gamma*T_avg + (1.0-gamma) * T_avg_1)]
                 self._T_init = tf.assign(T_avg, T_avg_1) # don't forget to initialize!
+        self._T_update = T_update
 
         # tf.assert( ... )
 
-        with tf.control_dependencies(T_avg_u):
+        with tf.control_dependencies(T_update):
             if mode == 'xyzrpy':
                 loss_xyz = tf.square(pred_xyz - xyz_avg) #(N,M,3)
                 loss_rpy = tf.square(pred_rpy - rpy_avg)
@@ -201,7 +192,8 @@ class DHCalibrator(object):
         #loss = tf.reduce_mean(loss)
 
         # build train ...
-        train = tf.train.GradientDescentOptimizer(learning_rate=1e-2).minimize(loss)
+        #train = tf.train.GradientDescentOptimizer(learning_rate=1e-1).minimize(loss)
+        train = tf.train.AdamOptimizer(learning_rate=1e-1).minimize(loss)
 
         # save ...
         self._T = T
@@ -278,7 +270,7 @@ class DHCalibratorROS(object):
         self._dh0 = np.float32(self._dh0)
         z = np.random.normal(
                 loc = 0.0,
-                scale = [np.deg2rad(1.0), 0.01, 0.01, np.deg2rad(1.0)],
+                scale = [np.deg2rad(1.0), 0.03, 0.03, np.deg2rad(1.0)],
                 size = np.shape(self._dh0)
                 )
         dh0 = np.add(self._dh0, z)

@@ -39,7 +39,9 @@ class SimpleTargetPublisher(object):
         self._num_markers = rospy.get_param('~num_markers', default=1)
 
         xyz = np.random.uniform(low = -1.0, high = 1.0, size=(self._num_markers, 3))
+        rpy = np.random.uniform(low = -3.14, high = 3.14, size=(self._num_markers, 3))
         self._xyz = xyz
+        self._rpy = rpy
 
         self._ppub = rospy.Publisher('/target_pose', AprilTagDetectionArray, queue_size=10)
         self._pvpub = rospy.Publisher('/target_pose_viz', PoseArray, queue_size=10)
@@ -55,7 +57,7 @@ class SimpleTargetPublisher(object):
         txn, rxn = fk(self._dhs, np.concatenate( [jpos, [0]] ))
 
         ## base_link --> object
-        M07 = [tx.compose_matrix(translate = xyz) for xyz in self._xyz]
+        M07 = [tx.compose_matrix(translate = xyz, angles=rpy) for (xyz, rpy) in zip(self._xyz, self._rpy)]
 
         ## base_link --> stereo_optical_link
         M06 = tx.compose_matrix(
