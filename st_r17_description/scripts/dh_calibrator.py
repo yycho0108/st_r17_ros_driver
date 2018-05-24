@@ -9,34 +9,36 @@ import functools
 
 import message_filters
 from approx_sync import ApproximateSynchronizer
-from collections import deque
+from collections import deque, defaultdict
 
 from geometry_msgs.msg import Pose, PoseStamped
 from sensor_msgs.msg import JointState
+from apriltags_ros.msg import AprilTagDetectionArray
+# using ^ as placeholder for now
 
 eps=np.finfo(float).eps*4.0
 
 def T2xyzrpy(T):
     with tf.name_scope('T2xyzrpy', [T]):
-        # assume T = (N,4,4)
+        # assume T = (N,M,4,4) or (N,4,4)
         i,j,k = (0,1,2)
 
-        x = T[:,0,3]
-        y = T[:,1,3]
-        z = T[:,2,3]
+        x = T[...,0,3]
+        y = T[...,1,3]
+        z = T[...,2,3]
 
         cy = tf.sqrt(
-                tf.square(T[:,i, i]) + 
-                tf.square(T[:,j, i])
+                tf.square(T[...,i, i]) + 
+                tf.square(T[...,j, i])
                 )
 
         eps_mask = tf.cast(tf.greater(cy, eps), tf.float32)
 
-        ax0 = tf.atan2( T[:,k, j],  T[:,k, k])
-        ay = tf.atan2(-T[:,k, i],  cy)
-        az0 = tf.atan2( T[:,j, i],  T[:,i, i])
+        ax0 = tf.atan2( T[...,k, j],  T[...,k,k])
+        ay = tf.atan2(-T[...,k, i],  cy)
+        az0 = tf.atan2( T[...,j, i],  T[...,i, i])
 
-        ax1 = tf.atan2(-T[:, j, k],  T[:, j, j])
+        ax1 = tf.atan2(-T[..., j, k],  T[..., j, j])
         az1 = tf.zeros_like(az0)
 
         ax = eps_mask * ax0 + (1.0 - eps_mask) * ax1 
@@ -107,38 +109,53 @@ class DHCalibrator(object):
         # inputs ...
         with tf.name_scope('inputs'):
             dhs, qs = zip(*[self._dh(i, *_dh) for (i, _dh) in enumerate(self._dh0)])
-            T_f = tf.placeholder(dtype=tf.float32, shape=[None,4,4], name='T_f') # camera_link -> object
+            T_f = tf.placeholder(dtype=tf.float32, shape=[None, None, 4,4], name='T_f') # camera_link -> object(s)
+            vis = tf.placeholder(dtype=tf.bool, shape=[None,None], name='vis') # marker visibility
 
         # build  transformation ...
         with tf.name_scope('transforms'):
-            Ts = [dh2T(*dh) for dh in dhs]
-            Ts.append(T_f)
-            T = reduce(lambda a,b : tf.matmul(a,b), Ts) # base_link -> object
+            Ts = [dh2T(*dh) for dh in dhs] # == (N, 4, 4)
+            T = reduce(lambda a,b : tf.matmul(a,b), Ts) # base_link -> stereo_optical_link
+            T = tf.einsum('aij,abjk->abik', T, T_f) # apply landmarks transforms
 
         mode = 'xyzrpy'
-        pred_xyz, pred_rpy = T2xyzrpy(T)
+        pred_xyz, pred_rpy = T2xyzrpy(T) # == (N, M, 3)
+        num_vis = tf.reduce_sum(vis, axis=0, keep_dims=True) # (N,M) -> (1, M)
+
+        # WARNING :: due to how the running mean was implemented,
+        # the first batch MUST contain all markers.
+        # MAKE SURE THIS HAPPENS.
 
         if mode == 'xyzrpy':
             with tf.name_scope('target_avg'):
                 xyz_avg = tf.Variable(initial_value=[0,0,0], trainable=False, dtype=np.float32)
                 rpy_avg = tf.Variable(initial_value=[0,0,0], trainable=False, dtype=np.float32)
 
-                xyz_avg_1 = tf.reduce_mean(pred_xyz, axis=0)
-                rpy_avg_1 = tf.reduce_mean(pred_rpy, axis=0)
+                xyz_avg_1 = pred_xyz * vis[..., tf.newaxis]
+                xyz_avg_1 = tf.reduce_sum(xyz_avg_1, axis=0) / num_vis[..., tf.newaxis]
+                xyz_avg_1 = tf.where(vis, xyz_avg_1, xyz_avg)
+
+                rpy_avg_1 = pred_rpy * vis[..., tf.newaxis]
+                rpy_avg_1 = tf.reduce_sum(rpy_avg_1, axis=0) / num_vis[..., tf.newaxis]
+                rpy_avg_1 = tf.where(vis, rpy_avg_1, rpy_avg)
 
                 xyz0 = tf.assign(xyz_avg, xyz_avg_1)
                 rpy0 = tf.assign(rpy_avg, rpy_avg_1)
                 self._T_init = tf.group(xyz0, rpy0)
-
+                
                 gamma = 0.9
+                new_xyz_avg = gamma * xyz_avg + (1.0 - gamma) * xyz_avg_1
+                new_rpy_avg = gamma * rpy_avg + (1.0 - gamma) * rpy_avg_1
 
-                xyz_avg_u = tf.assign(xyz_avg, gamma * xyz_avg + (1.0 - gamma) * xyz_avg_1)
-                rpy_avg_u = tf.assign(rpy_avg, gamma * rpy_avg + (1.0 - gamma) * rpy_avg_1)
+                xyz_avg_u = tf.assign(xyz_avg, new_xyz_avg)
+                rpy_avg_u = tf.assign(rpy_avg, new_xyz_avg)
                 T_avg_u = [xyz_avg_u, rpy_avg_u]
         else:
             with tf.name_scope('target_avg'):
-                T_avg_1 = tf.reduce_mean(T, axis=0)
                 T_avg = tf.Variable(initial_value = np.eye(4), trainable=False, dtype=np.float32)
+                T_avg_1 = T * vis[..., tf.newaxis, tf.newaxis]
+                T_avg_1 = tf.reduce_sum(T_avg_1, axis=0) / num_vis[..., tf.newaxis, tf.newaxis]
+                T_avg_1 = tf.where(vis, T_avg_1, T_avg)
                 T_avg_u = [tf.assign(T_avg, 0.999 * T_avg + 0.001 * T_avg_1)]
                 self._T_init = tf.assign(T_avg, T_avg_1) # don't forget to initialize!
 
@@ -165,6 +182,7 @@ class DHCalibrator(object):
         self._T = T
         self._T_f = T_f
         self._dhs = dhs
+        self._vis = vis
         self._qs = qs
         self._loss = loss
         if mode == 'xyzrpy':
@@ -180,9 +198,10 @@ class DHCalibrator(object):
         self._writer = tf.summary.FileWriter('/tmp/dh/13', self._graph)
         self._summary = tf.summary.merge_all()
 
-    def eval_1(self, js, xs):
+    def eval_1(self, js, xs, vis):
         feed_dict = {q:[j] for q,j in zip(self._qs, js)}
-        feed_dict[self._T_f] = [xs]
+        feed_dict[self._T_f] = np.expand_dims(xs, 0) # [1, M, 4, 4] 
+        feed_dict[self._vis] = np.expand_dims(vis, 0)
         return self.run(self._T, feed_dict = feed_dict)[0]
 
     def start(self):
@@ -190,9 +209,10 @@ class DHCalibrator(object):
         self._sess.run(tf.global_variables_initializer())
         self._iter = 0
 
-    def step(self, js, xs):
+    def step(self, js, xs, vis):
         feed_dict = {q:j for q,j in zip(self._qs, np.transpose(js))}
         feed_dict[self._T_f] = xs
+        feed_dict[self._vis] = vis
 
         if self._initialized:
             _, loss, dhs, summary = self.run(
@@ -219,6 +239,7 @@ class DHCalibratorROS(object):
         self._start_step  = 32 * 32
         self._batch_size  = 128
         self._mem_size    = 32 * 64
+        self._num_markers = rospy.get_param('~num_markers', default=1)
 
         self._dh0 = [
                 [np.pi, 0, -(0.033 + 0.322), 0],
@@ -243,40 +264,55 @@ class DHCalibratorROS(object):
 
         self._sub = ApproximateSynchronizer(slop=0.001, fs=[
             message_filters.Subscriber('st_r17/joint_states', JointState),
-            message_filters.Subscriber('target_pose', PoseStamped)],
+            message_filters.Subscriber('target_pose', AprilTagDetectionArray)],
             queue_size=4)
         self._sub.registerCallback(self.data_cb)
         self._pub = rospy.Publisher('dh', PoseStamped, queue_size=10)
+        self._m2i = defaultdict(lambda : len(self._m2i))
 
-    def data_cb(self, joint_msg, pose_msg):
+    def data_cb(self, joint_msg, detection_msgs):
         j = np.concatenate( (joint_msg.position, [0]) ) # assume final joint is fixed
-        q = pose_msg.pose.orientation
-        p = pose_msg.pose.position
-        X = tx.compose_matrix(
-                angles = tx.euler_from_quaternion([q.x, q.y, q.z, q.w]),
-                translate = [p.x, p.y, p.z]
-                )
+
+        Xs = [np.eye(4) for _ in range(self._num_markers)]
+        vis = [false for _ in range(self._num_markers)]
+
+        for pm in detection_msgs.detections:
+            # TODO : technically requires tf.transformPose(...) for robustness.
+            q = pm.pose.pose.orientation
+            p = pm.pose.pose.position
+            m_id = pm.id
+            X = tx.compose_matrix(
+                    angles = tx.euler_from_quaternion([q.x, q.y, q.z, q.w]),
+                    translate = [p.x, p.y, p.z]
+                    )
+            i = self._m2i[m_id] # transform tag id to index
+            Xs[i] = X
+            vis[i] = true
+
+        Xs = np.float32(_Xs)
         self._js.append(j)
-        self._Xs.append(X)
+        self._Xs.append(_Xs)
         self._step += 1
         rospy.loginfo_throttle(1.0, 'Current Step : {}'.format(self._step))
         
-        T = self._calib.eval_1(j, X)
+        T = self._calib.eval_1(j, X, vis) # == (1, M, 4, 4)
         txn = tx.translation_from_matrix(T)
         rxn = tx.quaternion_from_matrix(T)
         
-        msg = PoseStamped()
-        msg.header.frame_id = 'base_link'
-        msg.header.stamp = rospy.Time.now()
-        
-        msg.pose.position.x = txn[0]
-        msg.pose.position.y = txn[1]
-        msg.pose.position.z = txn[2]
+        msg = AprilTagDetectionArray()
+        ## CURRENTLY EDITING HERE
+        #msg = PoseStamped()
+        #msg.header.frame_id = 'base_link'
+        #msg.header.stamp = rospy.Time.now()
+        #
+        #msg.pose.position.x = txn[0]
+        #msg.pose.position.y = txn[1]
+        #msg.pose.position.z = txn[2]
     
-        msg.pose.orientation.x = rxn[0]
-        msg.pose.orientation.y = rxn[1]
-        msg.pose.orientation.z = rxn[2]
-        msg.pose.orientation.w = rxn[3]
+        #msg.pose.orientation.x = rxn[0]
+        #msg.pose.orientation.y = rxn[1]
+        #msg.pose.orientation.z = rxn[2]
+        #msg.pose.orientation.w = rxn[3]
     
         self._pub.publish(msg)
 
