@@ -2,9 +2,9 @@
 
 import rospy
 import numpy as np
-from geometry_msgs.msg import PoseStamped, PoseArray
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, PoseArray
 from sensor_msgs.msg import JointState
-from apriltags_ros.msg import AprilTagDetectionArray, AprilTagDetection
+from apriltags2_ros.msg import AprilTagDetectionArray, AprilTagDetection
 
 import tf.transformations as tx
 from fk import fk
@@ -49,10 +49,10 @@ class SimpleTargetPublisher(object):
     def publish(self):
         now = rospy.Time.now()
 
-        x = np.random.uniform(low=-np.pi, high=np.pi, size=5)
+        jpos = np.random.uniform(low=-np.pi, high=np.pi, size=5)
         if self._zero:
-            x *= 0
-        txn, rxn = fk(self._dhs, np.concatenate( [x, [0]] ))
+            jpos *= 0
+        txn, rxn = fk(self._dhs, np.concatenate( [jpos, [0]] ))
 
         ## base_link --> object
         M07 = [tx.compose_matrix(translate = xyz) for xyz in self._xyz]
@@ -62,28 +62,39 @@ class SimpleTargetPublisher(object):
                 angles = tx.euler_from_quaternion(rxn),
                 translate = txn) # T_0_6
 
+        M06R = tx.quaternion_matrix(rxn)
+        Rt =  M06R[:3,:3].T
+        T  = -np.matmul(Rt, np.reshape(txn, [3,1]))
+        M06i = np.zeros((4,4), dtype=np.float32)
+        M06i[:3,:3] = Rt
+        M06i[:3, 3] = T[:,0]
+        M06i[ 3, 3] = 1.0
+
         m_msg = AprilTagDetectionArray()
+        m_msg.header.stamp = now
+        m_msg.header.frame_id = 'stereo_optical_link'
+
         pv_msg = PoseArray()
         pv_msg.header.stamp = now
         pv_msg.header.frame_id = 'stereo_optical_link'
 
-        M67 = [np.matmul(np.linalg.inv(M06), M) for M in M07]
+        M67 = [np.matmul(M06i, M) for M in M07]
         for i in range(self._num_markers):
             M = M67[i]
             txn = tx.translation_from_matrix(M)
             rxn = tx.quaternion_from_matrix(M)
             
             msg = AprilTagDetection()
-            msg.id = i
-            msg.size = 0.0 # not really a thing
+            msg.id = [i]
+            msg.size = [0.0] # not really a thing
 
-            p_msg = msg.pose
-            p_msg.header.frame_id = 'stereo_optical_link'
-            p_msg.header.stamp = now
-            fill_pose_msg(p_msg.pose, txn, rxn)
+            pwcs = msg.pose
+            pwcs.header.frame_id = 'stereo_optical_link'
+            pwcs.header.stamp = now
+            fill_pose_msg(pwcs.pose.pose, txn, rxn)
 
             m_msg.detections.append(msg)
-            pv_msg.poses.append(p_msg.pose)
+            pv_msg.poses.append(pwcs.pose.pose)
 
         self._ppub.publish(m_msg)
         self._pvpub.publish(pv_msg)
@@ -101,9 +112,9 @@ class SimpleTargetPublisher(object):
         jmsg.header.frame_id = 'map' #??
 
         jmsg.name = ['waist', 'shoulder', 'elbow', 'hand', 'wrist']
-        jmsg.position = x
-        jmsg.velocity = np.zeros_like(x)
-        jmsg.effort = np.zeros_like(x)
+        jmsg.position = jpos
+        jmsg.velocity = np.zeros_like(jpos)
+        jmsg.effort = np.zeros_like(jpos)
         self._jpub.publish(jmsg)
         
     def run(self):

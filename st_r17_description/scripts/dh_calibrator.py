@@ -11,9 +11,9 @@ import message_filters
 from approx_sync import ApproximateSynchronizer
 from collections import deque, defaultdict
 
-from geometry_msgs.msg import Pose, PoseStamped
+from geometry_msgs.msg import Pose, PoseStamped, PoseWithCovarianceStamped, PoseArray
 from sensor_msgs.msg import JointState
-from apriltags_ros.msg import AprilTagDetectionArray, AprilTagDetection
+from apriltags2_ros.msg import AprilTagDetectionArray, AprilTagDetection
 # using ^ as placeholder for now
 
 eps=np.finfo(float).eps*4.0
@@ -96,8 +96,9 @@ def get_dh(index, alpha0, a0, d0, q0=0):
 
 """ DH Calibrator """
 class DHCalibrator(object):
-    def __init__(self, dh0):
+    def __init__(self, dh0, m):
         self._dh0 = np.float32(dh0)
+        self._m = m
         self._initialized = False
         self._build()
         self._log()
@@ -119,41 +120,53 @@ class DHCalibrator(object):
         # inputs ...
         with tf.name_scope('inputs'):
             dhs, qs = zip(*[self._dh(i, *_dh) for (i, _dh) in enumerate(self._dh0)])
-            T_f = tf.placeholder(dtype=tf.float32, shape=[None, None, 4,4], name='T_f') # camera_link -> object(s)
-            vis = tf.placeholder(dtype=tf.bool, shape=[None,None], name='vis') # marker visibility
+            T_f = tf.placeholder(dtype=tf.float32, shape=[None, self._m, 4,4], name='T_f') # camera_link -> object(s)
+            vis = tf.placeholder(dtype=tf.bool, shape=[None, self._m], name='vis') # marker visibility
 
         # build  transformation ...
         with tf.name_scope('transforms'):
             Ts = [dh2T(*dh) for dh in dhs] # == (N, 4, 4)
             T = reduce(lambda a,b : tf.matmul(a,b), Ts) # base_link -> stereo_optical_link
+
             T = tf.einsum('aij,abjk->abik', T, T_f) # apply landmarks transforms
+            #_T_f = tf.unstack(T_f, axis=1)
+            #_Ts = [tf.matmul(T, _T) for _T in _T_f]
+            #T = tf.stack(_Ts, axis=1)
 
-        mode = 'xyzrpy'
+        #mode = 'xyzrpy'
+        mode = 'T'
+
         pred_xyz, pred_rpy = T2xyzrpy(T) # == (N, M, 3)
-        num_vis = tf.reduce_sum(vis, axis=0, keep_dims=True) # (N,M) -> (1, M)
+        vis_f = tf.cast(vis, tf.float32)
 
+        #vis_sel = tf.tile(vis[..., tf.newaxis], [1,1,3])
+        num_vis = tf.reduce_sum(vis_f, axis=0, keep_dims=True) # (N,M) -> (1, M)
+        vis_sel = tf.cast(tf.greater(num_vis[..., tf.newaxis], 0), tf.float32) # -> (1, M, 1)
+
+        gamma = 0.9
         # WARNING :: due to how the running mean was implemented,
         # the first batch MUST contain all markers.
         # MAKE SURE THIS HAPPENS.
 
         if mode == 'xyzrpy':
             with tf.name_scope('target_avg'):
-                xyz_avg = tf.Variable(initial_value=[0,0,0], trainable=False, dtype=np.float32)
-                rpy_avg = tf.Variable(initial_value=[0,0,0], trainable=False, dtype=np.float32)
+                xyz_avg = tf.Variable(initial_value=np.zeros(shape=(self._m,3)), trainable=False, dtype=np.float32)
+                rpy_avg = tf.Variable(initial_value=np.zeros(shape=(self._m,3)), trainable=False, dtype=np.float32)
 
-                xyz_avg_1 = pred_xyz * vis[..., tf.newaxis]
-                xyz_avg_1 = tf.reduce_sum(xyz_avg_1, axis=0) / num_vis[..., tf.newaxis]
-                xyz_avg_1 = tf.where(vis, xyz_avg_1, xyz_avg)
+                #xyz_avg_1 = pred_xyz * vis_f[..., tf.newaxis]
+                #xyz_avg_1 = tf.reduce_sum(xyz_avg_1, axis=0) / num_vis[..., tf.newaxis]
+                #xyz_avg_1 = vis_sel * xyz_avg_1 + (1.0 - vis_sel) * xyz_avg
+                xyz_avg_1 = tf.reduce_mean(pred_xyz, axis=0)
 
-                rpy_avg_1 = pred_rpy * vis[..., tf.newaxis]
-                rpy_avg_1 = tf.reduce_sum(rpy_avg_1, axis=0) / num_vis[..., tf.newaxis]
-                rpy_avg_1 = tf.where(vis, rpy_avg_1, rpy_avg)
+                #rpy_avg_1 = pred_rpy * vis_f[..., tf.newaxis]
+                #rpy_avg_1 = tf.reduce_sum(rpy_avg_1, axis=0) / num_vis[..., tf.newaxis]
+                #rpy_avg_1 = vis_sel * rpy_avg_1 + (1.0 - vis_sel) * rpy_avg
+                rpy_avg_1 = tf.reduce_mean(pred_rpy, axis=0)
 
                 xyz0 = tf.assign(xyz_avg, xyz_avg_1)
                 rpy0 = tf.assign(rpy_avg, rpy_avg_1)
                 self._T_init = tf.group(xyz0, rpy0)
                 
-                gamma = 0.9
                 new_xyz_avg = gamma * xyz_avg + (1.0 - gamma) * xyz_avg_1
                 new_rpy_avg = gamma * rpy_avg + (1.0 - gamma) * rpy_avg_1
 
@@ -162,24 +175,25 @@ class DHCalibrator(object):
                 T_avg_u = [xyz_avg_u, rpy_avg_u]
         else:
             with tf.name_scope('target_avg'):
-                T_avg = tf.Variable(initial_value = np.eye(4), trainable=False, dtype=np.float32)
-                T_avg_1 = T * vis[..., tf.newaxis, tf.newaxis]
-                T_avg_1 = tf.reduce_sum(T_avg_1, axis=0) / num_vis[..., tf.newaxis, tf.newaxis]
-                T_avg_1 = tf.where(vis, T_avg_1, T_avg)
-                T_avg_u = [tf.assign(T_avg, 0.999 * T_avg + 0.001 * T_avg_1)]
+                T_avg = tf.Variable(initial_value = np.zeros(shape=(self._m,4,4)), trainable=False, dtype=np.float32)
+                #T_avg_1 = T * vis_f[..., tf.newaxis, tf.newaxis]
+                #T_avg_1 = tf.reduce_sum(T_avg_1, axis=0) / num_vis[..., tf.newaxis, tf.newaxis]
+                #T_avg_1 = tf.where(vis_sel, T_avg_1, T_avg)
+                T_avg_1 = tf.reduce_mean(T, axis=0)
+                T_avg_u = [tf.assign(T_avg, gamma*T_avg + (1.0-gamma) * T_avg_1)]
                 self._T_init = tf.assign(T_avg, T_avg_1) # don't forget to initialize!
 
         # tf.assert( ... )
 
-        with tf.control_dependencies(T_avg_u + [tf.Print(xyz_avg, [xyz_avg])]):
+        with tf.control_dependencies(T_avg_u):
             if mode == 'xyzrpy':
-                loss_xyz = tf.square(pred_xyz - xyz_avg)
-                loss_xyz = tf.reduce_mean(loss_xyz)
+                loss_xyz = tf.square(pred_xyz - xyz_avg) #(N,M,3)
                 loss_rpy = tf.square(pred_rpy - rpy_avg)
-                loss_rpy = tf.reduce_mean(loss_rpy)
                 loss = loss_xyz + loss_rpy
             else:
-                loss = tf.reduce_mean(tf.square(T - tf.expand_dims(T_avg, 0)))
+                loss = tf.square(T - tf.expand_dims(T_avg, 0))
+            loss = tf.reduce_mean(loss)
+            #loss = tf.reduce_sum(loss * vis_f[..., tf.newaxis]) / tf.reduce_sum(vis_f)
 
         # without running avg ... 
         #loss = tf.square(T - tf.reduce_mean(T, axis=0, keep_dims=True))
@@ -196,14 +210,15 @@ class DHCalibrator(object):
         self._qs = qs
         self._loss = loss
         if mode == 'xyzrpy':
-            self._loss_xyz = loss_xyz
-            self._loss_rpy = loss_rpy
+            self._loss_xyz = tf.reduce_mean(loss_xyz)
+            self._loss_rpy = tf.reduce_mean(loss_rpy)
         self._train = train
 
     def _log(self):
         # logs ...
-        tf.summary.scalar('loss_xyz', self._loss_xyz)
-        tf.summary.scalar('loss_rpy', self._loss_rpy)
+        #tf.summary.scalar('loss_xyz', self._loss_xyz)
+        #tf.summary.scalar('loss_rpy', self._loss_rpy)
+        tf.summary.scalar('loss', self._loss)
 
         self._writer = tf.summary.FileWriter('/tmp/dh/13', self._graph)
         self._summary = tf.summary.merge_all()
@@ -245,10 +260,10 @@ class DHCalibratorROS(object):
         # update params
         self._step = 0
         self._last_update = 0
-        self._update_step = 32
-        self._start_step  = 32 * 32
-        self._batch_size  = 128
-        self._mem_size    = 32 * 64
+        self._update_step = 8
+        self._start_step  = 64 * 16
+        self._batch_size  = 64
+        self._mem_size    = 64 * 64
         self._num_markers = rospy.get_param('~num_markers', default=1)
 
         self._dh0 = [
@@ -266,72 +281,82 @@ class DHCalibratorROS(object):
                 size = np.shape(self._dh0)
                 )
         dh0 = np.add(self._dh0, z)
-        self._calib = DHCalibrator(dh0)
+        self._calib = DHCalibrator(dh0, m=self._num_markers)
         self._calib.start()
 
-        self._js = deque(maxlen = self._mem_size)
-        self._Xs = deque(maxlen = self._mem_size)
+        self._data = deque(maxlen = self._mem_size)
 
         self._sub = ApproximateSynchronizer(slop=0.001, fs=[
             message_filters.Subscriber('st_r17/joint_states', JointState),
             message_filters.Subscriber('target_pose', AprilTagDetectionArray)],
             queue_size=4)
         self._sub.registerCallback(self.data_cb)
-        self._pub = rospy.Publisher('dh', PoseStamped, queue_size=10)
+        self._pub = rospy.Publisher('dh', AprilTagDetectionArray, queue_size=10)
+        self._vpub = rospy.Publisher('dh_viz', PoseArray, queue_size=10)
         self._m2i = defaultdict(lambda : len(self._m2i))
         self._i2m = {}
         self._seen = [False for _ in range(self._num_markers)]
 
     def data_cb(self, joint_msg, detection_msgs):
+        
         j = np.concatenate( (joint_msg.position, [0]) ) # assume final joint is fixed
-
         Xs = [np.eye(4) for _ in range(self._num_markers)]
-        vis = [false for _ in range(self._num_markers)]
+        vis = [False for _ in range(self._num_markers)]
 
         for pm in detection_msgs.detections:
             # TODO : technically requires tf.transformPose(...) for robustness.
-            q = pm.pose.pose.orientation
-            p = pm.pose.pose.position
-            m_id = pm.id
+            q = pm.pose.pose.pose.orientation
+            p = pm.pose.pose.pose.position
+            m_id = pm.id[0]
             X = tx.compose_matrix(
                     angles = tx.euler_from_quaternion([q.x, q.y, q.z, q.w]),
                     translate = [p.x, p.y, p.z]
                     )
             i = self._m2i[m_id] # transform tag id to index
+            if i >= self._num_markers:
+                continue
             self._i2m[i] = m_id
             Xs[i] = X
             vis[i] = True
             self._seen[i] = True
 
-        Xs = np.float32(_Xs)
-        self._js.append(j)
-        self._Xs.append(_Xs)
+        Xs = np.float32(Xs)
+
+        self._data.append( (j, Xs, vis) )
+
         self._step += 1
         rospy.loginfo_throttle(1.0, 'Current Step : {}'.format(self._step))
         
-        T = self._calib.eval_1(j, X, vis) # == (1, M, 4, 4)
+        T = self._calib.eval_1(j, Xs, vis) # == (1, M, 4, 4)
         
-        m_msg = AprilTagDetectionArray()
-        ## CURRENTLY EDITING HERE
         now = rospy.Time.now()
+
+        m_msg = AprilTagDetectionArray()
+        m_msg.header.frame_id = 'base_link'
+        m_msg.header.stamp = now
+
+        pv_msg = PoseArray()
+        pv_msg.header.stamp = now
+        pv_msg.header.frame_id = 'base_link'
+
         for i in range(self._num_markers):
             if self._seen[i]:
                 txn = tx.translation_from_matrix(T[i])
                 rxn = tx.quaternion_from_matrix(T[i])
 
                 msg = AprilTagDetection()
-                msg.id = self._i2m[i]
-                msg.size = 0.0 # not really a thing
+                msg.id = [self._i2m[i]]
+                msg.size = [0.0] # not really a thing
 
-                p_msg = PoseStamped()
-                p_msg.header.frame_id = 'base_link'
-                p_msg.header.stamp = now
-                fill_pose_msg(p_msg, txn, rxn)
-
-                msg.pose = p_msg
+                pwcs = msg.pose
+                pwcs.header.frame_id = 'base_link'
+                pwcs.header.stamp = now
+                fill_pose_msg(pwcs.pose.pose, txn, rxn)
 
                 m_msg.detections.append(msg)
+                pv_msg.poses.append(pwcs.pose.pose)
         self._pub.publish(m_msg)
+        self._vpub.publish(pv_msg)
 
         #msg = PoseStamped()
         #msg.header.frame_id = 'base_link'
@@ -352,11 +377,10 @@ class DHCalibratorROS(object):
             return
         if self._step < (self._last_update + self._update_step):
             return
-        idx = np.random.randint(low=0, high = len(self._js), size = self._batch_size)
-        js = [self._js[i] for i in idx] # (N, J)
-        Xs = [self._Xs[i] for i in idx] # (N, 4, 4)
+        idx = np.random.randint(low=0, high = len(self._data), size = self._batch_size)
+        js, Xs, vis = zip(*[self._data[i] for i in idx])
 
-        err, dhs = self._calib.step(js, Xs)
+        err, dhs = self._calib.step(js, Xs, vis)
         dhs = [dh[:3] for dh in dhs]
         real_err = np.mean(np.square(np.subtract(self._dh0[:,:3], dhs)))
 
