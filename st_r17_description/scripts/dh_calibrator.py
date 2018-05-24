@@ -257,7 +257,6 @@ class DHCalibratorROS(object):
         self._start_step  = 64 * 16
         self._batch_size  = 64
         self._mem_size    = 64 * 64
-        self._num_markers = rospy.get_param('~num_markers', default=1)
 
         self._dh0 = [
                 [np.pi, 0, -(0.033 + 0.322), 0],
@@ -268,12 +267,23 @@ class DHCalibratorROS(object):
                 [0, -0.012, 0.159, np.pi]
                 ]
         self._dh0 = np.float32(self._dh0)
-        z = np.random.normal(
-                loc = 0.0,
-                scale = [np.deg2rad(1.0), 0.03, 0.03, np.deg2rad(1.0)],
-                size = np.shape(self._dh0)
-                )
-        dh0 = np.add(self._dh0, z)
+        #self._dh0 = rospy.get_param('~dh0', default=self._dh0)
+
+        self._num_markers = rospy.get_param('~num_markers', default=1)
+        self._noise = rospy.get_param('~noise', default=True)
+
+        if self._noise:
+            # for testing with virtual markers, etc.
+            z = np.random.normal(
+                    loc = 0.0,
+                    scale = [np.deg2rad(1.0), 0.03, 0.03, np.deg2rad(1.0)],
+                    size = np.shape(self._dh0)
+                    )
+            dh0 = np.add(self._dh0, z)
+        else:
+            # for testing for real!
+            dh0 = self._dh0.copy()
+
         self._calib = DHCalibrator(dh0, m=self._num_markers)
         self._calib.start()
 
