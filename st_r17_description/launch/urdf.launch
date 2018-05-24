@@ -1,5 +1,5 @@
 <launch>
-    <arg name="ns" default="/"/>
+    <arg name="ns" default="st_r17"/>
     <arg name="use_kinect" default="true"/>
     <param name="robot_description"
         command="$(find xacro)/xacro '$(find st_r17_description)/urdf/robot.urdf.xacro' use_kinect:=$(arg use_kinect) --inorder" />
