@@ -14,6 +14,39 @@ from collections import deque
 from geometry_msgs.msg import Pose, PoseStamped
 from sensor_msgs.msg import JointState
 
+eps=np.finfo(float).eps*4.0
+
+def T2xyzrpy(T):
+    with tf.name_scope('T2xyzrpy', [T]):
+        # assume T = (N,4,4)
+        i,j,k = (0,1,2)
+
+        x = T[:,0,3]
+        y = T[:,1,3]
+        z = T[:,2,3]
+
+        cy = tf.sqrt(
+                tf.square(T[:,i, i]) + 
+                tf.square(T[:,j, i])
+                )
+
+        eps_mask = tf.cast(tf.greater(cy, eps), tf.float32)
+
+        ax0 = tf.atan2( T[:,k, j],  T[:,k, k])
+        ay = tf.atan2(-T[:,k, i],  cy)
+        az0 = tf.atan2( T[:,j, i],  T[:,i, i])
+
+        ax1 = tf.atan2(-T[:, j, k],  T[:, j, j])
+        az1 = tf.zeros_like(az0)
+
+        ax = eps_mask * ax0 + (1.0 - eps_mask) * ax1 
+        az = eps_mask * az0 + (1.0 - eps_mask) * az1 
+
+        xyz = tf.stack([x,y,z], axis=-1)
+        rpy = tf.stack([ax,ay,az], axis=-1)
+    return xyz, rpy
+
+
 """ Utility """
 def dh2T(alpha, a, d, q):
     with tf.name_scope('dh2T', [alpha, a, d, q]):
@@ -55,6 +88,7 @@ class DHCalibrator(object):
         self._dh0 = np.float32(dh0)
         self._initialized = False
         self._build()
+        self._log()
 
     @staticmethod
     def _dh(index, alpha0, a0, d0, q0):
@@ -68,113 +102,64 @@ class DHCalibrator(object):
         return (alpha, a, d, q+dq), q
 
     def _build(self):
+        tf.reset_default_graph()
+        self._graph = tf.get_default_graph()
         # inputs ...
-        dhs, qs = zip(*[self._dh(i, *_dh) for (i, _dh) in enumerate(self._dh0)])
-        T_f = tf.placeholder(dtype=tf.float32, shape=[None,4,4], name='T_f') # camera_link -> object
+        with tf.name_scope('inputs'):
+            dhs, qs = zip(*[self._dh(i, *_dh) for (i, _dh) in enumerate(self._dh0)])
+            T_f = tf.placeholder(dtype=tf.float32, shape=[None,4,4], name='T_f') # camera_link -> object
 
         # build  transformation ...
-        Ts = [dh2T(*dh) for dh in dhs]
-        Ts.append(T_f)
-        T = reduce(lambda a,b : tf.matmul(a,b), Ts) # base_link -> object
+        with tf.name_scope('transforms'):
+            Ts = [dh2T(*dh) for dh in dhs]
+            Ts.append(T_f)
+            T = reduce(lambda a,b : tf.matmul(a,b), Ts) # base_link -> object
 
-        # build loss ...
-        T_avg_1 = tf.reduce_mean(T, axis=0)
-        T_avg = tf.Variable(initial_value = np.eye(4), trainable=False, dtype=np.float32)
-        T_avg_u = tf.assign(T_avg, 0.99 * T_avg + 0.01 * T_avg_1)
-        self._T_init = tf.assign(T_avg, T_avg_1) # don't forget to initialize!
+        mode = 'xyzrpy'
+        pred_xyz, pred_rpy = T2xyzrpy(T)
 
-        T_targ = tf.placeholder_with_default(T_avg, shape=(4,4), name='target')
-        # tf.assert( ... )
+        if mode == 'xyzrpy':
+            with tf.name_scope('target_avg'):
+                xyz_avg = tf.Variable(initial_value=[0,0,0], trainable=False, dtype=np.float32)
+                rpy_avg = tf.Variable(initial_value=[0,0,0], trainable=False, dtype=np.float32)
 
-        with tf.control_dependencies([T_avg_u]):
-            loss = tf.square(T - tf.expand_dims(T_targ, 0))
+                xyz_avg_1 = tf.reduce_mean(pred_xyz, axis=0)
+                rpy_avg_1 = tf.reduce_mean(pred_rpy, axis=0)
 
-        #loss = tf.square(T - tf.reduce_mean(T, axis=0, keep_dims=True))
-        loss = tf.reduce_mean(loss)
+                xyz0 = tf.assign(xyz_avg, xyz_avg_1)
+                rpy0 = tf.assign(rpy_avg, rpy_avg_1)
+                self._T_init = tf.group(xyz0, rpy0)
 
-        # build train ...
-        train = tf.train.GradientDescentOptimizer(learning_rate=1.0).minimize(loss)
+                gamma = 0.99
 
-        # save ...
-        self._T = T
-        self._T_f = T_f
-        self._T_targ = T_targ
-        self._dhs = dhs
-        self._qs = qs
-        self._loss = loss
-        self._train = train
-
-    def eval_1(self, js, xs):
-        feed_dict = {q:[j] for q,j in zip(self._qs, js)}
-        feed_dict[self._T_f] = [xs]
-        return self.run(self._T, feed_dict = feed_dict)[0]
-
-    def start(self):
-        self._sess = tf.Session()
-        self._sess.run(tf.global_variables_initializer())
-
-    def step(self, js, xs, T_targ=None):
-        feed_dict = {q:j for q,j in zip(self._qs, np.transpose(js))}
-        feed_dict[self._T_f] = xs
-        if T_targ is not None:
-            feed_dict[self._T_targ] = T_targ
-
-        if self._initialized:
-            _, loss, dhs = self.run(
-                    [self._train, self._loss, self._dhs],
-                    feed_dict = feed_dict)
-            return loss, dhs
+                xyz_avg_u = tf.assign(xyz_avg, gamma * xyz_avg + (1.0 - gamma) * xyz_avg_1)
+                rpy_avg_u = tf.assign(rpy_avg, gamma * rpy_avg + (1.0 - gamma) * rpy_avg_1)
+                T_avg_u = [xyz_avg_u, rpy_avg_u]
         else:
-            _, dhs = self.run([self._T_init, self._dhs], feed_dict=feed_dict)
-            self._initialized = True
-            return -1, dhs
+            with tf.name_scope('target_avg'):
+                T_avg_1 = tf.reduce_mean(T, axis=0)
+                T_avg = tf.Variable(initial_value = np.eye(4), trainable=False, dtype=np.float32)
+                T_avg_u = [tf.assign(T_avg, 0.999 * T_avg + 0.001 * T_avg_1)]
+                self._T_init = tf.assign(T_avg, T_avg_1) # don't forget to initialize!
 
-    def run(self, *args, **kwargs):
-        return self._sess.run(*args, **kwargs)
-
-""" DH Calibrator """
-class DHCalibratorV2(object):
-    def __init__(self, dh0):
-        self._dh0 = np.float32(dh0)
-        self._initialized = False
-        self._build()
-
-    @staticmethod
-    def _dh(index, alpha0, a0, d0, q0):
-        """ Seed DH Parameters; note q0 is offset joint value. """
-        with tf.variable_scope('DH_{}'.format(index)):
-            alpha = tf.Variable(dtype=tf.float32, initial_value=alpha0, trainable=True, name='alpha'.format(index))
-            a = tf.Variable(dtype=tf.float32, initial_value=a0, trainable=True, name='a'.format(index))
-            d = tf.Variable(dtype=tf.float32, initial_value=d0, trainable=True, name='d'.format(index))
-            dq = tf.Variable(dtype=tf.float32, initial_value=q0, trainable=True, name='dq'.format(index))
-            q = tf.placeholder(dtype=tf.float32, shape=[None], name='q'.format(index))
-        return (alpha, a, d, q+dq), q
-
-    def _build(self):
-        # inputs ...
-        dhs, qs = zip(*[self._dh(i, *_dh) for (i, _dh) in enumerate(self._dh0)])
-        T_f = tf.placeholder(dtype=tf.float32, shape=[None,4,4], name='T_f') # camera_link -> object
-
-        # build  transformation ...
-        Ts = [dh2T(*dh) for dh in dhs]
-        Ts.append(T_f)
-        T = reduce(lambda a,b : tf.matmul(a,b), Ts) # base_link -> object
-
-        # build loss ...
-        T_avg_1 = tf.reduce_mean(T, axis=0)
-        T_avg = tf.Variable(initial_value = np.eye(4), trainable=False, dtype=np.float32)
-        T_avg_u = tf.assign(T_avg, 0.99 * T_avg + 0.01 * T_avg_1)
-        self._T_init = tf.assign(T_avg, T_avg_1) # don't forget to initialize!
         # tf.assert( ... )
 
-        with tf.control_dependencies([T_avg_u]):
-            loss = tf.square(T - tf.expand_dims(T_avg, 0))
+        with tf.control_dependencies(T_avg_u + [tf.Print(xyz_avg, [xyz_avg])]):
+            if mode == 'xyzrpy':
+                loss_xyz = tf.square(pred_xyz - xyz_avg)
+                loss_xyz = tf.reduce_mean(loss_xyz)
+                loss_rpy = tf.square(pred_rpy - rpy_avg)
+                loss_rpy = tf.reduce_mean(loss_rpy)
+                loss = loss_xyz + loss_rpy
+            else:
+                loss = tf.reduce_mean(tf.square(T - tf.expand_dims(T_avg, 0)))
 
+        # without running avg ... 
         #loss = tf.square(T - tf.reduce_mean(T, axis=0, keep_dims=True))
-        loss = tf.reduce_mean(loss)
+        #loss = tf.reduce_mean(loss)
 
         # build train ...
-        train = tf.train.GradientDescentOptimizer(learning_rate=1e-2).minimize(loss)
+        train = tf.train.GradientDescentOptimizer(learning_rate=1e-1).minimize(loss)
 
         # save ...
         self._T = T
@@ -182,7 +167,18 @@ class DHCalibratorV2(object):
         self._dhs = dhs
         self._qs = qs
         self._loss = loss
+        if mode == 'xyzrpy':
+            self._loss_xyz = loss_xyz
+            self._loss_rpy = loss_rpy
         self._train = train
+
+    def _log(self):
+        # logs ...
+        tf.summary.scalar('loss_xyz', self._loss_xyz)
+        tf.summary.scalar('loss_rpy', self._loss_rpy)
+
+        self._writer = tf.summary.FileWriter('/tmp/dh/11', self._graph)
+        self._summary = tf.summary.merge_all()
 
     def eval_1(self, js, xs):
         feed_dict = {q:[j] for q,j in zip(self._qs, js)}
@@ -192,15 +188,18 @@ class DHCalibratorV2(object):
     def start(self):
         self._sess = tf.Session()
         self._sess.run(tf.global_variables_initializer())
+        self._iter = 0
 
     def step(self, js, xs):
         feed_dict = {q:j for q,j in zip(self._qs, np.transpose(js))}
         feed_dict[self._T_f] = xs
 
         if self._initialized:
-            _, loss, dhs = self.run(
-                    [self._train, self._loss, self._dhs],
+            _, loss, dhs, summary = self.run(
+                    [self._train, self._loss, self._dhs, self._summary],
                     feed_dict = feed_dict)
+            self._writer.add_summary(summary, self._iter)
+            self._iter += 1
             return loss, dhs
         else:
             _, dhs = self.run([self._T_init, self._dhs], feed_dict=feed_dict)
@@ -213,6 +212,14 @@ class DHCalibratorV2(object):
 """ ROS Binding """
 class DHCalibratorROS(object):
     def __init__(self):
+        # update params
+        self._step = 0
+        self._last_update = 0
+        self._update_step = 32
+        self._start_step  = 32 * 32
+        self._batch_size  = 128
+        self._mem_size    = 32 * 64
+
         self._dh0 = [
                 [np.pi, 0, -(0.033 + 0.322), 0],
                 [np.pi/2, 0, 0, -np.pi/2],
@@ -224,15 +231,15 @@ class DHCalibratorROS(object):
         self._dh0 = np.float32(self._dh0)
         z = np.random.normal(
                 loc = 0.0,
-                scale = 0.01,
+                scale = [np.deg2rad(1.0), 0.01, 0.01, np.deg2rad(1.0)],
                 size = np.shape(self._dh0)
                 )
         dh0 = np.add(self._dh0, z)
         self._calib = DHCalibrator(dh0)
         self._calib.start()
 
-        self._js = deque(maxlen = 32 * 64)
-        self._Xs = deque(maxlen = 32 * 64)
+        self._js = deque(maxlen = self._mem_size)
+        self._Xs = deque(maxlen = self._mem_size)
 
         self._sub = ApproximateSynchronizer(slop=0.001, fs=[
             message_filters.Subscriber('st_r17/joint_states', JointState),
@@ -240,13 +247,6 @@ class DHCalibratorROS(object):
             queue_size=4)
         self._sub.registerCallback(self.data_cb)
         self._pub = rospy.Publisher('dh', PoseStamped, queue_size=10)
-
-        # update params
-        self._step = 0
-        self._last_update = 0
-        self._update_step = 8
-        self._start_step  = 32 * 32
-        self._batch_size  = 32
 
     def data_cb(self, joint_msg, pose_msg):
         j = np.concatenate( (joint_msg.position, [0]) ) # assume final joint is fixed

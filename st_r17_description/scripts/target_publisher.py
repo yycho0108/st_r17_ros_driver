@@ -36,10 +36,10 @@ class SimpleTargetPublisher(object):
         txn, rxn = fk(self._dhs, np.concatenate( [x, [0]] ))
 
         ## base_link --> object
-        #M07 = tx.compose_matrix(
-        #        translate = (0, 0, 0)
-        #        )# T_0_7
-        M07 = np.eye(4)
+        M07 = tx.compose_matrix(
+                translate = (1, 0, 0)
+                )# T_0_7
+        #M07 = np.eye(4)
         M06 = tx.compose_matrix(
                 angles = tx.euler_from_quaternion(rxn),
                 translate = txn) # T_0_6
