@@ -457,6 +457,15 @@
             <child link="stereo_link"/>
             <axis xyz="0 0 1"/>
         </joint>
+
+        <link name="stereo_optical_link"> </link>
+        <joint name="stereo_optical_joint" type="fixed">
+            <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}"/>
+            <parent link="stereo_link"/>
+            <child link="stereo_optical_link"/>
+            <axis xyz="0 0 1"/>
+        </joint>
+
         <xacro:stereo baseline="0.0636" parent="stereo_link"/>
     </xacro:if>
 

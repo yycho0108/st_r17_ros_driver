@@ -7,7 +7,7 @@
         <arg name="use_kinect" value="$(arg use_kinect)"/>
     </include>
 
-	<node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" output="screen">
+	<node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" output="screen" if="$(arg gui)">
         <param name="use_gui" value="$(arg gui)" />
         <remap from="joint_states" to="st_r17/joint_states"/>
     </node>
