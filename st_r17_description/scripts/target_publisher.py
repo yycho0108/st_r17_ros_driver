@@ -37,6 +37,7 @@ class SimpleTargetPublisher(object):
         self._rate = rospy.get_param('~rate', default=50)
         self._zero = rospy.get_param('~zero', default=False)
         self._num_markers = rospy.get_param('~num_markers', default=1)
+        self._p = rospy.get_param('~p', default=0.5) # visibility
 
         xyz = np.random.uniform(low = -1.0, high = 1.0, size=(self._num_markers, 3))
         rpy = np.random.uniform(low = -3.14, high = 3.14, size=(self._num_markers, 3))
@@ -47,6 +48,7 @@ class SimpleTargetPublisher(object):
         self._pvpub = rospy.Publisher('/target_pose_viz', PoseArray, queue_size=10)
         self._jpub = rospy.Publisher('/st_r17/joint_states', JointState, queue_size=10)
         self._gpub = rospy.Publisher('/ground_truth_viz', PoseArray, queue_size=10)
+
 
     def publish(self):
         now = rospy.Time.now()
@@ -81,7 +83,10 @@ class SimpleTargetPublisher(object):
         pv_msg.header.frame_id = 'stereo_optical_link'
 
         M67 = [np.matmul(M06i, M) for M in M07]
+
         for i in range(self._num_markers):
+            if np.random.random() > self._p:
+                continue
             M = M67[i]
             txn = tx.translation_from_matrix(M)
             rxn = tx.quaternion_from_matrix(M)

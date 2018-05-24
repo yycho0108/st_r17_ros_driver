@@ -130,8 +130,8 @@ class DHCalibrator(object):
         vis_f = tf.cast(vis, tf.float32)
 
         #vis_sel = tf.tile(vis[..., tf.newaxis], [1,1,3])
-        num_vis = tf.reduce_sum(vis_f, axis=0, keep_dims=True) # (N,M) -> (1, M)
-        vis_sel = tf.cast(tf.greater(num_vis[..., tf.newaxis], 0), tf.float32) # -> (1, M, 1)
+        num_vis = tf.reduce_sum(vis_f, axis=0) # (N,M) -> (M)
+
 
         gamma = 0.9
         # WARNING :: due to how the running mean was implemented,
@@ -139,19 +139,20 @@ class DHCalibrator(object):
         # MAKE SURE THIS HAPPENS.
 
         if mode == 'xyzrpy':
+            vis_sel = tf.greater(num_vis[..., tf.newaxis], 0) # -> (M, 1)
+            vis_sel = tf.tile(vis_sel, (1,3)) # -> (M,3)
+
             with tf.name_scope('target_avg'):
                 xyz_avg = tf.Variable(initial_value=np.zeros(shape=(self._m,3)), trainable=False, dtype=np.float32)
                 rpy_avg = tf.Variable(initial_value=np.zeros(shape=(self._m,3)), trainable=False, dtype=np.float32)
 
-                #xyz_avg_1 = pred_xyz * vis_f[..., tf.newaxis]
-                #xyz_avg_1 = tf.reduce_sum(xyz_avg_1, axis=0) / num_vis[..., tf.newaxis]
-                #xyz_avg_1 = vis_sel * xyz_avg_1 + (1.0 - vis_sel) * xyz_avg
-                xyz_avg_1 = tf.reduce_mean(pred_xyz, axis=0)
+                xyz_avg_1 = pred_xyz * vis_f[..., tf.newaxis]
+                xyz_avg_1 = tf.reduce_sum(xyz_avg_1, axis=0) / num_vis[:, tf.newaxis]
+                xyz_avg_1 = tf.where(vis_sel, xyz_avg_1, xyz_avg)
 
-                #rpy_avg_1 = pred_rpy * vis_f[..., tf.newaxis]
-                #rpy_avg_1 = tf.reduce_sum(rpy_avg_1, axis=0) / num_vis[..., tf.newaxis]
-                #rpy_avg_1 = vis_sel * rpy_avg_1 + (1.0 - vis_sel) * rpy_avg
-                rpy_avg_1 = tf.reduce_mean(pred_rpy, axis=0)
+                rpy_avg_1 = pred_rpy * vis_f[..., tf.newaxis]
+                rpy_avg_1 = tf.reduce_sum(rpy_avg_1, axis=0) / num_vis[:, tf.newaxis]
+                rpy_avg_1 = tf.where(vis_sel, rpy_avg_1, rpy_avg)
 
                 xyz0 = tf.assign(xyz_avg, xyz_avg_1)
                 rpy0 = tf.assign(rpy_avg, rpy_avg_1)
@@ -164,12 +165,17 @@ class DHCalibrator(object):
                 rpy_avg_u = tf.assign(rpy_avg, new_xyz_avg)
                 T_update = [xyz_avg_u, rpy_avg_u]
         else:
+            vis_sel = tf.greater(num_vis[..., tf.newaxis, tf.newaxis], 0) # -> (M, 1)
+            vis_sel = tf.tile(vis_sel, (1,4,4)) # -> (M,3)
+
             with tf.name_scope('target_avg'):
                 T_avg = tf.Variable(initial_value = np.zeros(shape=(self._m,4,4)), trainable=False, dtype=np.float32)
-                #T_avg_1 = T * vis_f[..., tf.newaxis, tf.newaxis]
-                #T_avg_1 = tf.reduce_sum(T_avg_1, axis=0) / num_vis[..., tf.newaxis, tf.newaxis]
-                #T_avg_1 = tf.where(vis_sel, T_avg_1, T_avg)
-                T_avg_1 = tf.reduce_mean(T, axis=0)
+
+                T_avg_1 = T * vis_f[..., tf.newaxis, tf.newaxis]
+                T_avg_1 = tf.reduce_sum(T_avg_1, axis=0) / num_vis[:, tf.newaxis]
+                T_avg_1 = tf.where(vis_sel, T_avg_1, T_avg)
+                #T_avg_1 = tf.reduce_mean(T, axis=0)
+
                 T_update = [tf.assign(T_avg, gamma*T_avg + (1.0-gamma) * T_avg_1)]
                 self._T_init = tf.assign(T_avg, T_avg_1) # don't forget to initialize!
         self._T_update = T_update
@@ -181,19 +187,22 @@ class DHCalibrator(object):
                 loss_xyz = tf.square(pred_xyz - xyz_avg) #(N,M,3)
                 loss_rpy = tf.square(pred_rpy - rpy_avg)
                 loss = loss_xyz + loss_rpy
+                loss = tf.reduce_sum(loss * vis_f[..., tf.newaxis]) / (3.0 * tf.reduce_sum(vis_f))
             else:
+                # TODO : relative or running avg?
                 loss = tf.square(T - tf.reduce_mean(T, axis=0, keep_dims=True))
                 #loss = tf.square(T - tf.expand_dims(T_avg, 0))
-            loss = tf.reduce_mean(loss)
-            #loss = tf.reduce_sum(loss * vis_f[..., tf.newaxis]) / tf.reduce_sum(vis_f)
+                loss = tf.reduce_sum(loss * vis_f[..., tf.newaxis, tf.newaxis]) / (16.0 * tf.reduce_sum(vis_f))
+
+            #loss = tf.reduce_mean(loss)
 
         # without running avg ... 
         #loss = tf.square(T - tf.reduce_mean(T, axis=0, keep_dims=True))
         #loss = tf.reduce_mean(loss)
 
         # build train ...
-        #train = tf.train.GradientDescentOptimizer(learning_rate=1e-1).minimize(loss)
-        train = tf.train.AdamOptimizer(learning_rate=1e-1).minimize(loss)
+        #train = tf.train.GradientDescentOptimizer(learning_rate=1e-2).minimize(loss)
+        train = tf.train.AdamOptimizer(learning_rate=5e-2).minimize(loss)
 
         # save ...
         self._T = T
@@ -253,10 +262,10 @@ class DHCalibratorROS(object):
         # update params
         self._step = 0
         self._last_update = 0
-        self._update_step = 8
-        self._start_step  = 64 * 16
-        self._batch_size  = 64
-        self._mem_size    = 64 * 64
+        self._update_step = 16
+        self._start_step  = 128 * 16
+        self._batch_size  = 128
+        self._mem_size    = 128 * 64
 
         self._dh0 = [
                 [np.pi, 0, -(0.033 + 0.322), 0],
@@ -273,12 +282,16 @@ class DHCalibratorROS(object):
         self._noise = rospy.get_param('~noise', default=True)
 
         if self._noise:
+
+            sc = np.float32([np.deg2rad(1.0), 0.03, 0.03, np.deg2rad(1.0)])
+
             # for testing with virtual markers, etc.
             z = np.random.normal(
                     loc = 0.0,
-                    scale = [np.deg2rad(1.0), 0.03, 0.03, np.deg2rad(1.0)],
+                    scale = sc,
                     size = np.shape(self._dh0)
                     )
+            z = np.clip(z, -2*sc, 2*sc)
             dh0 = np.add(self._dh0, z)
         else:
             # for testing for real!
@@ -305,6 +318,9 @@ class DHCalibratorROS(object):
         j = np.concatenate( (joint_msg.position, [0]) ) # assume final joint is fixed
         Xs = [np.eye(4) for _ in range(self._num_markers)]
         vis = [False for _ in range(self._num_markers)]
+
+        if len(detection_msgs.detections) <= 0:
+            return
 
         for pm in detection_msgs.detections:
             # TODO : technically requires tf.transformPose(...) for robustness.
@@ -343,7 +359,7 @@ class DHCalibratorROS(object):
         pv_msg.header.frame_id = 'base_link'
 
         for i in range(self._num_markers):
-            if self._seen[i]:
+            if vis[i]:
                 txn = tx.translation_from_matrix(T[i])
                 rxn = tx.quaternion_from_matrix(T[i])
 
