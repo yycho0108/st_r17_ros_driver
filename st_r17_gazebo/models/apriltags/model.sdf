@@ -1,0 +1,75 @@
+<?xml version="1.0"?>
+<sdf version="1.4">
+    <model name="a_0">
+		<pose>0 0 0 0 0 0</pose>
+		<static>true</static>
+		<link name="a_0">
+			<pose>0 0 0 0 0 0</pose>
+			<collision name="a_0_collision">
+				<geometry>
+					<box>
+						<size>0.01 0.1 0.1</size>
+					</box>
+				</geometry>
+				<surface>
+					<friction>
+						<ode>
+							<mu>100</mu>
+							<mu2>50</mu2>
+						</ode>
+					</friction>
+				</surface>
+			</collision>
+			<visual name="a_0_visual">
+				<cast_shadows>false</cast_shadows>
+				<geometry>
+					<box>
+						<size>0.01 0.1 0.1</size>
+					</box>				
+				</geometry>
+				<material>
+					<script>
+						<uri>model://apriltags/materials/scripts</uri>
+						<uri>model://apriltags/materials/textures</uri>
+						<name>a_0/Image</name>
+					</script>
+				</material>
+			</visual>
+    </model>
+    <model name="a_1">
+		<pose>0 0 0 0 0 0</pose>
+		<static>true</static>
+		<link name="a_1">
+			<pose>0 0 0 0 0 0</pose>
+			<collision name="a_1_collision">
+				<geometry>
+					<box>
+						<size>0.01 0.1 0.1</size>
+					</box>
+				</geometry>
+				<surface>
+					<friction>
+						<ode>
+							<mu>100</mu>
+							<mu2>50</mu2>
+						</ode>
+					</friction>
+				</surface>
+			</collision>
+			<visual name="a_1_visual">
+				<cast_shadows>false</cast_shadows>
+				<geometry>
+					<box>
+						<size>0.01 0.1 0.1</size>
+					</box>				
+				</geometry>
+				<material>
+					<script>
+						<uri>model://apriltags/materials/scripts</uri>
+						<uri>model://apriltags/materials/textures</uri>
+						<name>a_1/Image</name>
+					</script>
+				</material>
+			</visual>
+    </model>
+</sdf>

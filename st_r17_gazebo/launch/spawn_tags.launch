@@ -1,0 +1,24 @@
+<launch>
+    <!--
+    <param name="apriltags_description"
+        textfile="$(find st_r17_gazebo)/models/apriltags/model.sdf" />
+    -->
+    <param name="a_0_description"
+        command="$(find xacro)/xacro '$(find st_r17_gazebo)/models/model.xacro' tag_id:=0 --inorder"/>
+    <param name="a_1_description"
+        command="$(find xacro)/xacro '$(find st_r17_gazebo)/models/model.xacro' tag_id:=1 --inorder"/>
+
+    <node name="spawn_0" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen"
+        args="-urdf -model a_0 -param a_0_description -x 0.1 -y 0.2 -z 0.5" />
+    <node name="spawn_1" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen"
+        args="-urdf -model a_1 -param a_1_description -x 0.0 -y 0.1 -z 0.5" />
+    <!--
+    <node name="spawn_1" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen"
+        args="-sdf -model a_1 -param apriltags_description -x 0.2 -y 0.3 -z -0.1" />
+    <node name="spawn_2" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen"
+        args="-sdf -model a_2 -param apriltags_description -x 0.4 -y 0.4 -z 0.2" />
+    <node name="spawn_3" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen"
+        args="-sdf -model a_3 -param apriltags_description -x 0.5 -y 0.5 -z 0.2" />
+    -->
+
+</launch>
