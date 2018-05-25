@@ -17,7 +17,6 @@ from apriltags2_ros.msg import AprilTagDetectionArray, AprilTagDetection
 # using ^ as placeholder for now
 
 eps=np.finfo(float).eps*4.0
-
 def fill_pose_msg(msg, txn, rxn):
     msg.position.x = txn[0]
     msg.position.y = txn[1]
@@ -112,6 +111,7 @@ class DHCalibrator(object):
             dhs, qs = zip(*[self._dh(i, *_dh) for (i, _dh) in enumerate(self._dh0)])
             T_f = tf.placeholder(dtype=tf.float32, shape=[None, self._m, 4,4], name='T_f') # camera_link -> object(s)
             vis = tf.placeholder(dtype=tf.bool, shape=[None, self._m], name='vis') # marker visibility
+            T_targ = tf.placeholder(dtype=tf.float32, shape=[self._m, 4, 4], name='T_targ')
 
         # build  transformation ...
         with tf.name_scope('transforms'):
@@ -190,10 +190,10 @@ class DHCalibrator(object):
                 loss = tf.reduce_sum(loss * vis_f[..., tf.newaxis]) / (3.0 * tf.reduce_sum(vis_f))
             else:
                 # TODO : relative or running avg?
-                loss = tf.square(T - tf.reduce_mean(T, axis=0, keep_dims=True))
+                #loss = tf.square(T - tf.reduce_mean(T, axis=0, keep_dims=True))
                 #loss = tf.square(T - tf.expand_dims(T_avg, 0))
+                loss = tf.square(T - tf.expand_dims(T_targ, 0))
                 loss = tf.reduce_sum(loss * vis_f[..., tf.newaxis, tf.newaxis]) / (16.0 * tf.reduce_sum(vis_f))
-
             #loss = tf.reduce_mean(loss)
 
         # without running avg ... 
@@ -207,6 +207,7 @@ class DHCalibrator(object):
         # save ...
         self._T = T
         self._T_f = T_f
+        self._T_targ = T_targ
         self._dhs = dhs
         self._vis = vis
         self._qs = qs
@@ -236,10 +237,11 @@ class DHCalibrator(object):
         self._sess.run(tf.global_variables_initializer())
         self._iter = 0
 
-    def step(self, js, xs, vis):
+    def step(self, js, xs, vis, ys):
         feed_dict = {q:j for q,j in zip(self._qs, np.transpose(js))}
         feed_dict[self._T_f] = xs
         feed_dict[self._vis] = vis
+        feed_dict[self._T_targ] = ys
 
         if self._initialized:
             _, loss, dhs, summary = self.run(
@@ -263,9 +265,9 @@ class DHCalibratorROS(object):
         self._step = 0
         self._last_update = 0
         self._update_step = 16
-        self._start_step  = 128 * 16
-        self._batch_size  = 128
-        self._mem_size    = 128 * 64
+        self._start_step  = 32 * 16
+        self._batch_size  = 32
+        self._mem_size    = 32 * 64
 
         self._dh0 = [
                 [np.pi, 0, -(0.033 + 0.322), 0],
@@ -283,7 +285,7 @@ class DHCalibratorROS(object):
 
         if self._noise:
 
-            sc = np.float32([np.deg2rad(1.0), 0.03, 0.03, np.deg2rad(1.0)])
+            sc = np.float32([np.deg2rad(3.0), 0.03, 0.03, np.deg2rad(3.0)])
 
             # for testing with virtual markers, etc.
             z = np.random.normal(
@@ -301,17 +303,36 @@ class DHCalibratorROS(object):
         self._calib.start()
 
         self._data = deque(maxlen = self._mem_size)
+        self._Ys = [None for _ in range(self._num_markers)]
 
         self._sub = ApproximateSynchronizer(slop=0.001, fs=[
             message_filters.Subscriber('st_r17/joint_states', JointState),
-            message_filters.Subscriber('target_pose', AprilTagDetectionArray)],
-            queue_size=4)
+            message_filters.Subscriber('stereo_to_target', AprilTagDetectionArray)
+            ], queue_size=4)
+        self._gt_sub = rospy.Subscriber('base_to_target', AprilTagDetectionArray, self.ground_truth_cb) # fixed w.r.t. time
+
         self._sub.registerCallback(self.data_cb)
         self._pub = rospy.Publisher('dh', AprilTagDetectionArray, queue_size=10)
         self._vpub = rospy.Publisher('dh_viz', PoseArray, queue_size=10)
         self._m2i = defaultdict(lambda : len(self._m2i))
         self._i2m = {}
         self._seen = [False for _ in range(self._num_markers)]
+
+    def ground_truth_cb(self, detection_msgs):
+        for pm in detection_msgs.detections:
+            # TODO : technically requires tf.transformPose(...) for robustness.
+            q = pm.pose.pose.pose.orientation
+            p = pm.pose.pose.pose.position
+            m_id = pm.id[0]
+            Y = tx.compose_matrix(
+                    angles = tx.euler_from_quaternion([q.x, q.y, q.z, q.w]),
+                    translate = [p.x, p.y, p.z]
+                    )
+            i = self._m2i[m_id] # transform tag id to index
+            if i >= self._num_markers:
+                continue
+            self._i2m[i] = m_id
+            self._Ys[i] = Y
 
     def data_cb(self, joint_msg, detection_msgs):
         
@@ -377,20 +398,6 @@ class DHCalibratorROS(object):
         self._pub.publish(m_msg)
         self._vpub.publish(pv_msg)
 
-        #msg = PoseStamped()
-        #msg.header.frame_id = 'base_link'
-        #msg.header.stamp = rospy.Time.now()
-        #
-        #msg.pose.position.x = txn[0]
-        #msg.pose.position.y = txn[1]
-        #msg.pose.position.z = txn[2]
-    
-        #msg.pose.orientation.x = rxn[0]
-        #msg.pose.orientation.y = rxn[1]
-        #msg.pose.orientation.z = rxn[2]
-        #msg.pose.orientation.w = rxn[3]
-        #self._pub.publish(msg)
-
     def update(self):
         if self._step < self._start_step:
             return
@@ -399,7 +406,12 @@ class DHCalibratorROS(object):
         idx = np.random.randint(low=0, high = len(self._data), size = self._batch_size)
         js, Xs, vis = zip(*[self._data[i] for i in idx])
 
-        err, dhs = self._calib.step(js, Xs, vis)
+        for y in self._Ys:
+            if y is None:
+                rospy.loginfo_throttle(1.0, 'Not all target markers were initialized')
+                return
+
+        err, dhs = self._calib.step(js, Xs, vis, self._Ys)
         dhs = [dh[:3] for dh in dhs]
         real_err = np.mean(np.square(np.subtract(self._dh0[:,:3], dhs)))
 

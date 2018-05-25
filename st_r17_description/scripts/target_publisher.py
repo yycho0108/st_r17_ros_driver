@@ -39,15 +39,20 @@ class SimpleTargetPublisher(object):
         self._num_markers = rospy.get_param('~num_markers', default=1)
         self._p = rospy.get_param('~p', default=0.5) # visibility
 
+        np.random.seed(0)
         xyz = np.random.uniform(low = -1.0, high = 1.0, size=(self._num_markers, 3))
         rpy = np.random.uniform(low = -3.14, high = 3.14, size=(self._num_markers, 3))
+
         self._xyz = xyz
         self._rpy = rpy
 
-        self._ppub = rospy.Publisher('/target_pose', AprilTagDetectionArray, queue_size=10)
+        self._ppub = rospy.Publisher('/stereo_to_target', AprilTagDetectionArray, queue_size=10)
         self._pvpub = rospy.Publisher('/target_pose_viz', PoseArray, queue_size=10)
+
+        self._gpub = rospy.Publisher('/base_to_target', AprilTagDetectionArray, queue_size=10)
+        self._gvpub = rospy.Publisher('/ground_truth_viz', PoseArray, queue_size=10)
+
         self._jpub = rospy.Publisher('/st_r17/joint_states', JointState, queue_size=10)
-        self._gpub = rospy.Publisher('/ground_truth_viz', PoseArray, queue_size=10)
 
 
     def publish(self):
@@ -106,6 +111,10 @@ class SimpleTargetPublisher(object):
         self._ppub.publish(m_msg)
         self._pvpub.publish(pv_msg)
 
+        g_msg = AprilTagDetectionArray()
+        g_msg.header.stamp = now
+        g_msg.header.frame_id = 'base_link'
+
         gv_msg = PoseArray()
         gv_msg.header.stamp = now
         gv_msg.header.frame_id = 'base_link'
@@ -114,11 +123,21 @@ class SimpleTargetPublisher(object):
             M = M07[i]
             txn = tx.translation_from_matrix(M)
             rxn = tx.quaternion_from_matrix(M)
+
+            msg = AprilTagDetection()
+            msg.id = [i]
+            msg.size = [0.0] # not really a thing
+
+            pwcs = msg.pose
+            pwcs.header.frame_id = 'base_link'
+            pwcs.header.stamp = now
+            fill_pose_msg(pwcs.pose.pose, txn, rxn)
             
-            pose = Pose()
-            fill_pose_msg(pose, txn, rxn)
-            gv_msg.poses.append(pose)
-        self._gpub.publish(gv_msg)
+            g_msg.detections.append(msg)
+            gv_msg.poses.append(pwcs.pose.pose)
+
+        self._gpub.publish(g_msg)
+        self._gvpub.publish(gv_msg)
 
         #gmsg = PoseStamped()
         #gmsg.header.frame_id = 'base_link'

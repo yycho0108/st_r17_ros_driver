@@ -24,5 +24,7 @@ def _build():
 
     x,y,z,r,p,y = sympy.Symbols('x,y,z,r,p,y') # target
     dx = [x,y,z,r,p,y]
+    psi = F.jacobian(
     dP = pinv(psi).dot(dx)
+    P += dP
 
