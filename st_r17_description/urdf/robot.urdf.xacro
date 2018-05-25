@@ -11,6 +11,12 @@
 			izz="${0.0833333 * mass * (x*x + y*y)}" />
 	</xacro:macro>
 
+    <link name="world"/>
+    <joint name="fixed" type="fixed">
+        <parent link="world"/>
+        <child link="base_link"/>
+    </joint>
+
 	<link
 		name="base_link">
 		<inertial>
