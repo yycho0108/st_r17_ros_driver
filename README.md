@@ -1,5 +1,29 @@
 # ST-R17 ROS Driver
 
+## Installation
+
+1. Clone the Repositories:
+
+    ```bash
+    cd ~/catkin_ws/src
+    git clone http://github.com/yycho0108/st_r17_ros_driver.git
+    ```
+
+2. Install the Dependencies:
+
+    ```bash
+    rosdep update
+    rosdep install st_r17_ros_driver --ignore-src
+    ```
+
+3. Build the project:
+
+    ```bash
+    catkin build st_r17_ros_driver
+    ```
+
+## Documentation
+
 ### Generating URDF:
 
 Refer to the [instructions]().
@@ -15,7 +39,13 @@ roscd st_r17_ikfast_plugin
 ./generate_ikfast_solver.sh
 ```
 
-### Simulation Demo
+## Run
+
+The following are the most basic demonstrations of functions.
+
+See the included packages such as [st\_r17\_calibration](st_r17_calibration) or [st\_r17\_gazebo](st_r17_gazebo) for more involved demos.
+
+### Rviz Simulation Demo
 
 ```bash
 roslaunch st_r17_moveit_config demo.launch 
