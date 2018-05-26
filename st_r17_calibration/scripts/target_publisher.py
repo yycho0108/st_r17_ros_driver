@@ -39,7 +39,6 @@ class SimpleTargetPublisher(object):
         self._num_markers = rospy.get_param('~num_markers', default=1)
         self._p = rospy.get_param('~p', default=0.5) # visibility
 
-        np.random.seed(0)
         xyz = np.random.uniform(low = -1.0, high = 1.0, size=(self._num_markers, 3))
         rpy = np.random.uniform(low = -3.14, high = 3.14, size=(self._num_markers, 3))
 

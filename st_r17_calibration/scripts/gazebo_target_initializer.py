@@ -13,8 +13,6 @@ import tf.transformations as tx
 
 from fk import fk
 
-np.random.seed(0)
-
 def fill_pose_msg(msg, txn, rxn):
     msg.position.x = txn[0]
     msg.position.y = txn[1]
