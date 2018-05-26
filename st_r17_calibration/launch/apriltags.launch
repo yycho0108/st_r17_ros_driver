@@ -3,7 +3,7 @@
   <arg name="node_namespace" default="apriltags2" />
   <arg name="camera_name" default="/left" />
   <arg name="camera_frame" default="left_camera_optical" />
-  <arg name="image_topic" default="image_raw" />
+  <arg name="image_topic" default="image_rect_color" />
 
   <!-- Set parameters -->
   <rosparam command="load" file="$(find st_r17_calibration)/config/settings.yaml" ns="$(arg node_namespace)" />

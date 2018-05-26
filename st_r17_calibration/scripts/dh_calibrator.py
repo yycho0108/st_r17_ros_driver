@@ -266,10 +266,10 @@ class DHCalibratorROS(object):
         self._tfl = tf_ros.TransformListener()
         self._step = 0
         self._last_update = 0
-        self._update_step = 4
-        self._start_step  = 4 * 16
-        self._batch_size  = 4
-        self._mem_size    = 4 * 64
+        self._update_step = 8
+        self._start_step  = 32 * 4
+        self._batch_size  = 32
+        self._mem_size    = 32 * 64
 
         self._dh0 = [
                 [np.pi, 0, -(0.033 + 0.322), 0],
@@ -307,7 +307,7 @@ class DHCalibratorROS(object):
         self._data = deque(maxlen = self._mem_size)
         self._Ys = [None for _ in range(self._num_markers)]
 
-        self._sub = ApproximateSynchronizer(slop=0.05, fs=[
+        self._sub = ApproximateSynchronizer(slop=0.01, fs=[
             message_filters.Subscriber('st_r17/joint_states', JointState),
             message_filters.Subscriber('stereo_to_target', AprilTagDetectionArray)
             ], queue_size=20)

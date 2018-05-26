@@ -28,7 +28,7 @@ def fill_pose_msg(msg, txn, rxn):
 def get_xyz_rpy(size,
         min_z=0.1,
         min_r=3.0, max_r=5.0,
-        min_phi=np.deg2rad(15), max_phi=np.deg2rad(45),
+        min_phi=np.deg2rad(10), max_phi=np.deg2rad(30),
         min_theta=-np.pi, max_theta=np.pi):
     
     center = (0, 0, min_z)
@@ -59,7 +59,18 @@ class GazeboTargetInitializer(object):
         self._num_markers = rospy.get_param('~num_markers', default=1)
         self._tag_size = rospy.get_param('~tag_size', default=0.1)
 
-        xyz, rpy = get_xyz_rpy(self._num_markers, min_z = self._tag_size)
+        self._min_Y = rospy.get_param('~min_Y', default=-np.pi)
+        self._max_Y = rospy.get_param('~max_Y', default=np.pi)
+        self._min_P = rospy.get_param('~min_P', default=np.deg2rad(10))
+        self._max_P = rospy.get_param('~max_P', default=np.deg2rad(30))
+
+        xyz, rpy = get_xyz_rpy(self._num_markers,
+                min_z = self._tag_size,
+                min_phi = self._min_P,
+                max_phi = self._max_P,
+                min_theta = self._min_Y,
+                max_theta = self._max_Y
+                )
         self._xyz = xyz
         self._rpy = rpy
 

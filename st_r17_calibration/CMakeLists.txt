@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
 project(st_r17_calibration)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-# add_compile_options(-std=c++11)
+add_compile_options(-std=c++11)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -12,6 +12,11 @@ find_package(catkin REQUIRED COMPONENTS
     roscpp
     apriltags2_ros
     gazebo_ros
+
+	moveit_ros_move_group
+	moveit_ros_planning
+	moveit_ros_planning_interface
+	moveit_core
     )
 
 ## System dependencies are found with CMake's conventions
@@ -135,6 +140,11 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/st_r17_calibration_node.cpp)
+
+add_executable(scouter src/scouter.cpp)
+target_link_libraries(scouter
+	${catkin_LIBRARIES}
+	)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
