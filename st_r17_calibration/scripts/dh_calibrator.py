@@ -320,6 +320,8 @@ class DHCalibratorROS(object):
         self._i2m = {}
         self._seen = [False for _ in range(self._num_markers)]
 
+        self._errs = []
+
     def ground_truth_cb(self, detection_msgs):
         for pm in detection_msgs.detections:
             # TODO : technically requires tf.transformPose(...) for robustness.
@@ -446,11 +448,23 @@ class DHCalibratorROS(object):
         rospy.loginfo('Current Error : {} / {}'.format(err, real_err))
         rospy.loginfo_throttle(5.0, 'Current DH : {}'.format(dhs))
 
+        # save data ...
+        self._errs.append(real_err)
+        self._dh = dhs
+
+    def save(self):
+        np.savetxt('/tmp/err.csv', self._errs)
+        np.savetxt('/tmp/dh.csv', self._dh)
+
     def run(self):
         rate = rospy.Rate(50)
         while not rospy.is_shutdown():
             self.update()
-            rate.sleep()
+            try:
+                rate.sleep()
+            except rospy.ROSInterruptException:
+                break
+        self.save()
 
 def main():
     rospy.init_node('dh_calibrator')

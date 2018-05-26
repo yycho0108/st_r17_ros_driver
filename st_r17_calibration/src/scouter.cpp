@@ -97,8 +97,8 @@ void ScouterMoveGroupInterface::move(){
 
     float r = random_uniform(0.5, 1.0);
     float phi = random_uniform(15 * deg, 45 * deg);
-    //float theta = random_uniform(-M_PI, M_PI);
-    float theta = random_uniform(-1.0, 1.0);
+    float theta = random_uniform(-M_PI, M_PI);
+    //float theta = random_uniform(-1.0, 1.0);
 
     tf::Quaternion q;
     if(ps.size() > 0){
@@ -215,8 +215,8 @@ ScouterMoveGroupInterface::ScouterMoveGroupInterface(ros::NodeHandle& nh):
 	group.setNumPlanningAttempts(8); // attempt three times
 
 	group.setGoalPositionTolerance(0.05); // 5cm tolerance
-	group.setGoalOrientationTolerance(5.0 * M_PI / 180); // 5 deg. tolerance
-	group.setGoalJointTolerance(5.0 * M_PI / 180); // 5 deg. tolerance
+	group.setGoalOrientationTolerance(1.0 * M_PI / 180); // 5 deg. tolerance
+	group.setGoalJointTolerance(1.0 * M_PI / 180); // 5 deg. tolerance
 
 	group.setSupportSurfaceName("table");
 	group.setStartStateToCurrentState();

@@ -41,6 +41,7 @@ Currently, the seeds are configured for the ST R17 Arm, but the implementation i
 3. Start perception stack and calibration:
 
     ```bash
+    ROS_NAMESPACE=/left rosrun image_proc image_proc
     roslaunch st_r17_calibration apriltags.launch
     rosrun st_r17_calibration dh_calibrator.py _num_markers:=4 stereo_to_target:=/tag_detections
     ```
