@@ -3,6 +3,7 @@
 import numpy as np
 import sympy
 import rospy
+import tf as tf_ros
 import tf.transformations as tx
 import tensorflow as tf
 import functools
@@ -262,12 +263,13 @@ class DHCalibrator(object):
 class DHCalibratorROS(object):
     def __init__(self):
         # update params
+        self._tfl = tf_ros.TransformListener()
         self._step = 0
         self._last_update = 0
-        self._update_step = 16
-        self._start_step  = 32 * 16
-        self._batch_size  = 32
-        self._mem_size    = 32 * 64
+        self._update_step = 4
+        self._start_step  = 4 * 16
+        self._batch_size  = 4
+        self._mem_size    = 4 * 64
 
         self._dh0 = [
                 [np.pi, 0, -(0.033 + 0.322), 0],
@@ -305,10 +307,10 @@ class DHCalibratorROS(object):
         self._data = deque(maxlen = self._mem_size)
         self._Ys = [None for _ in range(self._num_markers)]
 
-        self._sub = ApproximateSynchronizer(slop=0.001, fs=[
+        self._sub = ApproximateSynchronizer(slop=0.05, fs=[
             message_filters.Subscriber('st_r17/joint_states', JointState),
             message_filters.Subscriber('stereo_to_target', AprilTagDetectionArray)
-            ], queue_size=4)
+            ], queue_size=20)
         self._gt_sub = rospy.Subscriber('base_to_target', AprilTagDetectionArray, self.ground_truth_cb) # fixed w.r.t. time
 
         self._sub.registerCallback(self.data_cb)
@@ -321,6 +323,7 @@ class DHCalibratorROS(object):
     def ground_truth_cb(self, detection_msgs):
         for pm in detection_msgs.detections:
             # TODO : technically requires tf.transformPose(...) for robustness.
+            # i.e. into base_link frame. for now, ok
             q = pm.pose.pose.pose.orientation
             p = pm.pose.pose.pose.position
             m_id = pm.id[0]
@@ -335,37 +338,61 @@ class DHCalibratorROS(object):
             self._Ys[i] = Y
 
     def data_cb(self, joint_msg, detection_msgs):
+        try:
+            jorder = ['waist', 'shoulder', 'elbow', 'hand', 'wrist']
+            j_idx = [joint_msg.name.index(j) for j in jorder]
+            j = [joint_msg.position[i] for i in j_idx]
+            j = np.concatenate( (j, [0]) ) # assume final joint is fixed
+        except Exception as e:
+            rospy.logerr_throttle(1.0, 'Joint Positions Failed : {} \n {}'.format(e, joint_msg))
         
-        j = np.concatenate( (joint_msg.position, [0]) ) # assume final joint is fixed
         Xs = [np.eye(4) for _ in range(self._num_markers)]
         vis = [False for _ in range(self._num_markers)]
 
         if len(detection_msgs.detections) <= 0:
             return
 
-        for pm in detection_msgs.detections:
-            # TODO : technically requires tf.transformPose(...) for robustness.
-            q = pm.pose.pose.pose.orientation
-            p = pm.pose.pose.pose.position
-            m_id = pm.id[0]
-            X = tx.compose_matrix(
-                    angles = tx.euler_from_quaternion([q.x, q.y, q.z, q.w]),
-                    translate = [p.x, p.y, p.z]
-                    )
-            i = self._m2i[m_id] # transform tag id to index
-            if i >= self._num_markers:
-                continue
-            self._i2m[i] = m_id
-            Xs[i] = X
-            vis[i] = True
-            self._seen[i] = True
+        try:
+            for pm in detection_msgs.detections:
+                # pm.pose = pwcs
+                # pm.pose.pose = pwc
+                # pm.pose.pose.pose = p
+
+
+                # TODO : technically requires tf.transformPose(...) for robustness.
+                #pose = tf.transformPose(
+
+                ps = PoseStamped(
+                        header = pm.pose.header,
+                        pose = pm.pose.pose.pose
+                        )
+                # this transform should theoretically be painless + static
+                # Optionally, store the transform beforehand and apply it
+                ps = self._tfl.transformPose('stereo_optical_link', ps)
+
+                q = ps.pose.orientation
+                p = ps.pose.position
+                m_id = pm.id[0]
+                X = tx.compose_matrix(
+                        angles = tx.euler_from_quaternion([q.x, q.y, q.z, q.w]),
+                        translate = [p.x, p.y, p.z]
+                        )
+                i = self._m2i[m_id] # transform tag id to index
+                if i >= self._num_markers:
+                    continue
+                self._i2m[i] = m_id
+                Xs[i] = X
+                vis[i] = True
+                self._seen[i] = True
+        except Exception as e:
+            rospy.logerr_throttle(1.0, 'TF Failed : {}'.format(e))
 
         Xs = np.float32(Xs)
 
         self._data.append( (j, Xs, vis) )
 
         self._step += 1
-        rospy.loginfo_throttle(1.0, 'Current Step : {}'.format(self._step))
+        rospy.loginfo_throttle(1.0, 'Current Step : {}; vis : {}'.format(self._step, vis))
         
         T = self._calib.eval_1(j, Xs, vis) # == (1, M, 4, 4)
         
