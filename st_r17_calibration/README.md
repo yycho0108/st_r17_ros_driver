@@ -2,6 +2,14 @@
 
 DH Parameter Calibration with April Tags
 
+## Results
+
+- Gazebo simulation
+
+[Youtube Link]()
+![gz\_dh\_err](figs/gz_dh_err.png)
+
+
 Currently, the seeds are configured for the ST R17 Arm, but the implementation is universal for all robot arms.
 
 ## Run DH Calibration (Virtual)
