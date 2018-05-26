@@ -1,16 +1,50 @@
 # ST R17 Calibration
 
-DH Parameter Calibration with April Tags
+DH Parameter Calibration with April Tags.
+
+Currently, the seeds are configured for the ST R17 Arm, but the implementation is universal for all robot arms.
 
 ## Results
 
-- Gazebo simulation
+### Gazebo simulation
 
 [Youtube Link](https://youtu.be/T6hWMyOZmXE)
 ![gz\_dh\_err](figs/gz_dh_err.png)
 
+#### DH Parameters
 
-Currently, the seeds are configured for the ST R17 Arm, but the implementation is universal for all robot arms.
+Unfortunately, calibrated joint angle biases were not recorded.
+
+Nominal:
+
+&alpha;  | a        |d         | &Delta;q |
+:-------:|:--------:|:--------:|:--------:|
+&pi;     | 0        | -0.355   | 0        |
+&pi;/2   | 0        | 0        | -&pi;/2  |
+0        | 0.375    | 0        | 0        |
+0        | 0.375    | 0.024    | &pi;/2   |
+&pi;/2   | 0        | 0.042    | 1.176    |
+0        | -0.012   | 0.159    | &pi;     |
+
+Calibrated:
+
+&alpha;  | a        |d         | &Delta;q |
+:-------:|:--------:|:--------:|:--------:|
+3.1407   |4.62e-4   | -0.373   | N/A      |
+1.5714   |-7.18e-3  | 0.029    | N/A      |
+-1.04e-3 | 0.385    | -0.028   | N/A      |
+-1.94e-3 | 0.380    | 0.027    | N/A      |
+1.5703   | 2.12e-3  | 0.060    | N/A      |
+1.40e-3  | -6.15e-3 | 0.1274   | N/A      |
+
+#### Kinematic Error
+
+![kin\_err.png](figs/kin_err.png)
+Mean Absolute Error over 1000 Samples:
+
+x (m)  | y (m) | z(m)  |R (deg)|P (deg)|Y (deg)|
+:-----:|:-----:|:-----:|:-----:|:-----:|:-----:|
+8.32e-3|8.44e-3|1.87e-2|1.03e-1|7.65e-2|4.72e-1|
 
 ## Run DH Calibration (Virtual)
 
