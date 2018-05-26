@@ -117,13 +117,12 @@ class GazeboTargetInitializer(object):
 
         for i in range(self._num_markers):
             txn = self._xyz[i]
-            #rxn = tx.quaternion_from_euler(*self._rpy[i])
             rxn = tx.quaternion_from_euler(*(self._rpy[i]))
             rxn = tx.quaternion_multiply(rxn, q)
 
             msg = AprilTagDetection()
             msg.id = [i]
-            msg.size = [0.0] # not really a thing
+            msg.size = [self._tag_size]
 
             pwcs = msg.pose
             pwcs.header.frame_id = 'base_link'
