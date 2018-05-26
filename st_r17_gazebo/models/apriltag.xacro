@@ -1,8 +1,19 @@
 <?xml version="1.0"?>
 <robot name="apriltag" xmlns:xacro="http://ros.org/wiki/xacro">
     <xacro:arg name="tag_id" default="0"/>
+    <xacro:arg name="tag_size" default="0.1"/>
+
+    <!--
+    <link name="world"/>
+    <joint name="fixed" type="fixed">
+        <parent link="world"/>
+        <child link="base_link"/>
+    </joint>
+    -->
 
     <link name="base_link">
+        <gravity>0</gravity>
+
         <inertial>
             <origin
                 xyz="0 0 0"
@@ -22,7 +33,7 @@
                 xyz="0 0 0"
                 rpy="0 0 0" />
             <geometry>
-                <box size="0.01 0.1 0.1"/>
+                <box size="0.01 $(arg tag_size) $(arg tag_size)"/>
             </geometry>
             <!--<material name="Hope"/>-->
         </visual>
@@ -31,11 +42,12 @@
                 xyz="0 0 0"
                 rpy="0 0 0" />
             <geometry>
-                <box size="0.01 0.1 0.1"/>
+                <box size="0.01 $(arg tag_size) $(arg tag_size)"/>
             </geometry>
         </collision>
     </link>
     <gazebo reference="base_link">
+        <turnGravityOff>true</turnGravityOff>
         <material>a_$(arg tag_id)/Image</material>
     </gazebo>
 

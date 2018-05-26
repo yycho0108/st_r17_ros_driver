@@ -1,0 +1,9 @@
+<launch>
+    <arg name="tag_size" default="0.1"/>
+    <arg name="tag_id" default="0"/>
+    <arg name="pose" default=""/>
+    <param name="a_$(arg tag_id)_description"
+        command="$(find xacro)/xacro '$(find st_r17_gazebo)/models/apriltag.xacro' tag_id:=$(arg tag_id) tag_size:=$(arg tag_size) --inorder"/>
+    <node name="spawn_$(arg tag_id)" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen"
+        args="-urdf -model a_$(arg tag_id) -param a_$(arg tag_id)_description $(arg pose)"/>
+</launch>
