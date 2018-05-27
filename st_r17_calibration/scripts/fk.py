@@ -83,6 +83,7 @@ def main():
     d_rpy = []
     for i in range(1000):
         qs = np.random.uniform(-np.pi, np.pi, size=6)
+        qs[-1] = 0.0
         txn0, rxn0 = fk(_dh0, qs)
         txn1, rxn1 = fk(_dh1, qs)
         rpy0 = tx.euler_from_quaternion(rxn0)

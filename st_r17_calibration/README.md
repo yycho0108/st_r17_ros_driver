@@ -48,12 +48,17 @@ x (m)  | y (m) | z(m)  |R (deg)|P (deg)|Y (deg)|
 
 ## Run DH Calibration (Virtual)
 
+[Youtube Link](https://www.youtube.com/watch?v=DozXbHvRHp8)
+
 1. Run the perception stack for detecting target markers.
 
     The below node publishes a virtual target at a fixed offset from `base_link`:
     
     ```bash
+    roscore
+    roslaunch st_r17_calibration urdf.launch use_kinect:=false
     rosrun st_r17_calibration target_publisher.py _num_markers:=4 _zero:=false _rate:=100
+    rviz -d $(rospack find st_r17_description)/rviz/dh.rviz
     ```
 
 2. Run the Calibrator.
