@@ -163,7 +163,7 @@ class DHCalibrator(object):
             T = tf.einsum('aij,abjk->abik', T06, T_f) # apply landmarks transforms
 
         #mode = 'xyzrpy'
-        mode = 'T'
+        mode = 'Jacobian'
 
         # T_targ_67 = ...
         # TODO : inverse of homogeneous transform can be found a lot easier.
@@ -174,62 +174,37 @@ class DHCalibrator(object):
         pred_xyzRPY = T2xyzrpy_v2(T06) # == (N, 12)
         targ_xyzRPY = T2xyzrpy_v2(T_targ_06) # == (N, M, 12)
 
-        #with tf.control_dependencies([tf.Print(pred_xyzRPY[1], [pred_xyzRPY[1]])]):
-        targ_xyzRPY = tf.reduce_sum(targ_xyzRPY * vis_f[..., tf.newaxis], axis=1) # (N, 12)
-        targ_xyzRPY /= tf.reduce_sum(vis_f, axis=1, keep_dims=True) #(N,12)/(N,1)
+        if mode != 'Jacobian':
+            loss = tf.square(tf.expand_dims(pred_xyzRPY,1) - targ_xyzRPY)
+            loss = tf.reduce_sum(loss * vis_f[..., tf.newaxis]) / (6.0 * tf.reduce_sum(vis_f))
+            train = tf.train.AdamOptimizer(learning_rate=1e-2).minimize(loss)
+        else:
+            targ_xyzRPY = tf.reduce_sum(targ_xyzRPY * vis_f[..., tf.newaxis], axis=1) # (N, 12)
+            targ_xyzRPY /= tf.reduce_sum(vis_f, axis=1, keep_dims=True) #(N,12)/(N,1)
 
-        delta_xyzRPY = targ_xyzRPY - pred_xyzRPY # (N, 12)
-        delta_xyzRPY_1 = tf.reshape(delta_xyzRPY, [-1, 1]) #(Nx12, 1)
+            delta_xyzRPY = targ_xyzRPY - pred_xyzRPY # (N, 12)
+            delta_xyzRPY_1 = tf.reshape(delta_xyzRPY, [-1, 1]) #(Nx12, 1)
 
-        #delta_xyzRPY = targ_xyzRPY - pred_xyzRPY[:,tf.newaxis,:]
-        #loss = tf.reduce_sum(tf.square(delta_xyzRPY) * vis_f[...,tf.newaxis]) / (6.0 * tf.reduce_sum(vis_f))
+            # Jacobian Methods
+            pred_xyzRPY_1 = tf.reshape(pred_xyzRPY, [-1]) # (Nx12,)
 
-        #delta_T = T_targ_06 - tf.expand_dims(T06, axis=1)
-        #loss = tf.square(delta_T)
-        #loss = tf.reduce_sum(loss * vis_f[..., tf.newaxis, tf.newaxis]) / (16.0 * tf.reduce_sum(vis_f))
+            psi = jacobian(pred_xyzRPY_1, dhps) #(Nx12, J, 4)
+            BS,_,J,_ = tf.unstack(tf.shape(psi))
+            psi = tf.reshape(psi, [BS, J*4])
 
-        # Jacobian Methods
-        pred_xyzRPY_1 = tf.reshape(pred_xyzRPY, [-1]) # (Nx12,)
-        ## pred_xyzRPY = (
+            d_dh = tf.matmul(pinv(psi), delta_xyzRPY_1)
+            d_dh = tf.reshape(d_dh, dhps.shape) #d_dh = (Jx4) --> (J,4)
 
-        #psi = tf.stack([tf.gradients(p, dhps) for p in tf.unstack(pred_xyzRPY_1, num=32*12, axis=0)], axis=0)
-        psi = jacobian(pred_xyzRPY_1, dhps) #(Nx12, J, 4)
-        BS,_,J,_ = tf.unstack(tf.shape(psi))
-        psi = tf.reshape(psi, [BS, J*4])
-
-        d_dh = tf.matmul(pinv(psi), delta_xyzRPY_1)
-        d_dh = tf.reshape(d_dh, dhps.shape) #d_dh = (Jx4) --> (J,4)
-
-        #loss = tf.reduce_sum(tf.square(d_dh)) # update magnitude
-        #train = tf.assign_add(dhps, 1e-1 * d_dh)
+            loss = tf.reduce_sum(tf.square(d_dh)) # update magnitude
+            train = tf.assign_add(dhps, 1e-1 * d_dh)
 
         # Simple Loss
-        loss = tf.reduce_mean(tf.square(delta_xyzRPY))
-        train = tf.train.AdamOptimizer(learning_rate=5e-2).minimize(loss)
+        #loss = tf.reduce_mean(tf.square(delta_xyzRPY))
+        #train = tf.train.AdamOptimizer(learning_rate=5e-2).minimize(loss)
 
         # --> (Jx4, 1)
 
         #vis_sel = tf.tile(vis[..., tf.newaxis], [1,1,3])
-
-        #if mode == 'xyzrpy':
-        #    loss_xyz = tf.square(pred_xyz - xyz_avg) #(N,M,3)
-        #    loss_rpy = tf.square(pred_rpy - rpy_avg)
-        #    loss = loss_xyz + loss_rpy
-        #    loss = tf.reduce_sum(loss * vis_f[..., tf.newaxis]) / (3.0 * tf.reduce_sum(vis_f))
-        #else:
-        #    # TODO : relative or running avg?
-        #    #loss = tf.square(T - tf.reduce_mean(T, axis=0, keep_dims=True))
-        #    #loss = tf.square(T - tf.expand_dims(T_avg, 0))
-        #loss = tf.square(T - tf.expand_dims(T_targ, 0))
-        #loss = tf.reduce_sum(loss * vis_f[..., tf.newaxis, tf.newaxis]) / (16.0 * tf.reduce_sum(vis_f))
-
-        # without running avg ... 
-        #loss = tf.square(T - tf.reduce_mean(T, axis=0, keep_dims=True))
-        #loss = tf.reduce_mean(loss)
-
-        # build train ...
-        #train = tf.train.GradientDescentOptimizer(learning_rate=1e-2).minimize(loss)
-        #train = tf.train.AdamOptimizer(learning_rate=5e-2).minimize(loss)
 
         # save ...
         self._T = T

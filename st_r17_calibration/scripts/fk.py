@@ -76,7 +76,7 @@ def main():
             [0, -0.012, 0.159, np.pi]
             ]
     _dh0 = np.float32(_dh0)
-    _dh1 = np.loadtxt('/tmp/dh.csv')
+    _dh1 = np.loadtxt('/tmp/dhf.csv')
     _dh1 = np.concatenate((_dh1, _dh0[:, -1, np.newaxis]), axis=-1)
 
     d_xyz = []
@@ -94,8 +94,8 @@ def main():
     d_xyz = np.float32(d_xyz)
     d_rpy = np.rad2deg(np.float32(d_rpy))
 
-    print np.mean(np.abs(d_xyz), axis=0)
-    print np.mean(np.abs(d_rpy), axis=0)
+    print('d_xyz', np.mean(np.abs(d_xyz), axis=0))
+    print('d_rpy', np.mean(np.abs(d_rpy), axis=0))
     characterize(d_xyz, d_rpy)
 
 

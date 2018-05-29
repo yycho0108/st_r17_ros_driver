@@ -41,6 +41,7 @@ class SimpleTargetPublisher(object):
 
         xyz = np.random.uniform(low = -1.0, high = 1.0, size=(self._num_markers, 3))
         rpy = np.random.uniform(low = -3.14, high = 3.14, size=(self._num_markers, 3))
+        rpy[:,1] /= 2.0 # -1.57 ~ 1.57 valid range
 
         self._xyz = xyz
         self._rpy = rpy
