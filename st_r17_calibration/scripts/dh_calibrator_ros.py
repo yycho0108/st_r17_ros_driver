@@ -37,9 +37,9 @@ class DHCalibratorROS(object):
         self._step = 0
         self._last_update = 0
         self._update_step = 8
-        self._start_step  = 32 * 4
-        self._batch_size  = 32
-        self._mem_size    = 32 * 64
+        self._start_step  = 64 * 4
+        self._batch_size  = 64
+        self._mem_size    = 64 * 64
 
         # ~dh = nominal DH parameter
         self._dh = rospy.get_param('~dh', default=None)
@@ -76,7 +76,7 @@ class DHCalibratorROS(object):
         self._data = deque(maxlen = self._mem_size)
         self._Ys = [None for _ in range(self._num_markers)]
 
-        self._sub = ApproximateSynchronizer(slop=0.01, fs=[
+        self._sub = ApproximateSynchronizer(slop=0.001, fs=[
             message_filters.Subscriber('joint_states', JointState),
             message_filters.Subscriber('stereo_to_target', AprilTagDetectionArray)
             ], queue_size=20)
