@@ -4,7 +4,7 @@
 
 ## Introduction
 
-![st_r17](figs/st_r17.jpg)
+![st_r17](./figs/st_r17.jpg)
 
 This project is a collection of a C++ ROS driver and , for the ST-R17 5DoF Robot Arm from [ST Robotics](https://www.strobotics.com/).
 
