@@ -49,6 +49,7 @@ class DHCalibratorROS(object):
         self._num_markers = rospy.get_param('~num_markers', default=1)
         self._noise = rospy.get_param('~noise', default=True)
         self._slop = rospy.get_param('~slop', default=0.01)
+        self._lr = rospy.get_param('~lr', default=5e-2)
 
         if self._noise:
 
@@ -70,7 +71,7 @@ class DHCalibratorROS(object):
         self._dh0 = dh 
         self._dhf = None
 
-        self._calib = DHCalibrator(dh, m=self._num_markers)
+        self._calib = DHCalibrator(dh, m=self._num_markers, lr=self._lr)
         self._calib.start()
 
         self._data = deque(maxlen = self._mem_size)

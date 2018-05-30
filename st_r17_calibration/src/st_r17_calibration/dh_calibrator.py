@@ -112,9 +112,10 @@ def jacobian(y, x):
 
 """ DH Calibrator """
 class DHCalibrator(object):
-    def __init__(self, dh0, m):
+    def __init__(self, dh0, m, lr):
         self._dh0 = np.float32(dh0)
         self._m = m
+        self._lr = lr
         self._build()
         self._log()
 
@@ -186,7 +187,7 @@ class DHCalibrator(object):
             #loss = tf.square(tf.expand_dims(pred_xyzRPY,1) - targ_xyzRPY) # self position loss, dynamic
             loss = tf.square(tf.expand_dims(T_targ,axis=0) - T) # object location loss, static
             loss = tf.reduce_sum(loss * vis_f[..., tf.newaxis, tf.newaxis]) / (16.0 * tf.reduce_sum(vis_f))
-            train = tf.train.AdamOptimizer(learning_rate=1e-2).minimize(loss)
+            train = tf.train.AdamOptimizer(learning_rate=self._lr).minimize(loss)
         else:
             targ_xyzRPY = tf.reduce_sum(targ_xyzRPY * vis_f[..., tf.newaxis], axis=1) # (N, 12)
             targ_xyzRPY /= tf.reduce_sum(vis_f, axis=1, keep_dims=True) #(N,12)/(N,1)

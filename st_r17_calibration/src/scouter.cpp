@@ -58,6 +58,8 @@ class ScouterMoveGroupInterface{
 		const moveit::core::JointModelGroup& j_group;
         ros::Subscriber gt_sub;
         std::vector<geometry_msgs::Point> ps;
+
+        float noise;
 	public:
 		ScouterMoveGroupInterface(ros::NodeHandle& nh);
 		bool moveToPose(const geometry_msgs::Pose& target_pose);
@@ -139,9 +141,9 @@ void ScouterMoveGroupInterface::move(){
         auto& p = ps[i];
         
         theta = atan2(p.y, p.x);
-        theta += random_uniform(-1.0 * deg, 1.0 * deg);
+        theta += random_uniform(-noise, noise);
         phi   = atan2(p.z, sqrt(p.y*p.y+p.x*p.x));
-        phi   += random_uniform(-1.0 * deg, 1.0 * deg);
+        phi   += random_uniform(-noise ,noise);
     }else{
         ROS_INFO_THROTTLE(1.0, "%d", ps.size());
         return;
@@ -251,6 +253,9 @@ ScouterMoveGroupInterface::ScouterMoveGroupInterface(ros::NodeHandle& nh):
 	group("arm_group"),
 	j_group(*group.getRobotModel()->getJointModelGroup("arm_group"))
 {
+    if(! ros::param::get("~noise", noise)){
+        noise = (M_PI / 180) * 1.0; // +-1 deg.
+    }
 	// **** CONFIGURE GROUP **** //
 	group.setNumPlanningAttempts(8); // attempt three times
 
