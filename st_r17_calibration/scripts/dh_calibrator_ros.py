@@ -49,6 +49,7 @@ class DHCalibratorROS(object):
         self._dh = np.float32(self._dh)
         self._num_markers = rospy.get_param('~num_markers', default=1)
         self._noise = rospy.get_param('~noise', default=True)
+        self._slop = rospy.get_param('~slop', default=0.01)
 
         if self._noise:
 
@@ -76,7 +77,7 @@ class DHCalibratorROS(object):
         self._data = deque(maxlen = self._mem_size)
         self._Ys = [None for _ in range(self._num_markers)]
 
-        self._sub = ApproximateSynchronizer(slop=0.001, fs=[
+        self._sub = ApproximateSynchronizer(slop=self._slop, fs=[
             message_filters.Subscriber('joint_states', JointState),
             message_filters.Subscriber('stereo_to_target', AprilTagDetectionArray)
             ], queue_size=20)
@@ -210,8 +211,7 @@ class DHCalibratorROS(object):
                 return
 
         err, dhs = self._calib.step(js, Xs, vis, self._Ys)
-        dhs = [dh[:3] for dh in dhs]
-        real_err = np.mean(np.square(np.subtract(self._dh[:,:3], dhs)))
+        real_err = np.mean(np.square(np.subtract(self._dh, dhs)))
 
         self._last_update = self._step
         rospy.loginfo('Current Error : {} / {}'.format(err, real_err))

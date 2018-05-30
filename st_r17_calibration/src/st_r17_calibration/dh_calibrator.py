@@ -131,6 +131,7 @@ class DHCalibrator(object):
 
     @staticmethod
     def _dhs(dh0):
+        """ Seed DH Parameters as a single array"""
         n_j = len(dh0)
         dh = tf.Variable(dtype=tf.float32, initial_value=dh0, trainable=True, name='dh') #(J,4)
         q  = tf.placeholder(dtype=tf.float32, shape=[None, n_j], name='q') #(B,J)
@@ -151,9 +152,9 @@ class DHCalibrator(object):
 
         # build  transformation ...
         with tf.name_scope('transforms'):
-            dhps_j = tf.unstack(dhps, axis=0)
+            dhs_j = tf.unstack(dhs, axis=0)
             qs_j = tf.unstack(qs, axis=1)
-            Ts = [dh2Tv2(dh,q) for (dh,q) in zip(dhps_j,qs_j)]
+            Ts = [dh2Tv2(dh,q) for (dh,q) in zip(dhs_j,qs_j)]
             T06 = reduce(lambda a,b : tf.matmul(a,b), Ts) # base_link -> stereo_optical_link
 
             T = tf.einsum('aij,abjk->abik', T06, T_f) # apply landmarks transforms
@@ -202,16 +203,16 @@ class DHCalibrator(object):
             # Jacobian Methods
             pred_xyzRPY_1 = tf.reshape(pred_xyzRPY, [-1]) # (Nx12,)
 
-            psi = jacobian(pred_xyzRPY_1, dhps) #(Nx12, J, 4)
+            psi = jacobian(pred_xyzRPY_1, dhs) #(Nx12, J, 4)
             BS,_,J,_ = tf.unstack(tf.shape(psi))
             psi = tf.reshape(psi, [BS, J*4])
 
             d_dh = tf.matmul(pinv(psi), delta_xyzRPY_1)
-            d_dh = tf.reshape(d_dh, dhps.shape) #d_dh = (Jx4) --> (J,4)
+            d_dh = tf.reshape(d_dh, dhs.shape) #d_dh = (Jx4) --> (J,4)
 
             #loss = tf.reduce_sum(tf.square(d_dh)) # update magnitude
             loss = tf.reduce_sum(tf.square(delta_xyzRPY))
-            train = tf.assign_add(dhps, 1e-2 * d_dh)
+            train = tf.assign_add(dhs, 1e-2 * d_dh)
 
         # Simple Loss
         #loss = tf.reduce_mean(tf.square(delta_xyzRPY))
@@ -225,7 +226,7 @@ class DHCalibrator(object):
         self._T = T
         self._T_f = T_f
         self._T_targ = T_targ
-        self._dhs = dhps
+        self._dhs = dhs
         self._vis = vis
         self._qs = qs_j
         self._loss = loss

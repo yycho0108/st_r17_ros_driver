@@ -41,7 +41,7 @@ def get_xyz_rpy(size,
     y = r * np.cos(phi) * np.sin(theta)
     z = r * np.sin(phi)
 
-    R = 0 * np.random.uniform(low=-np.pi, high=np.pi, size=size)
+    R = np.random.uniform(low=-np.pi, high=np.pi, size=size)
     P = -phi
     Y = theta
 

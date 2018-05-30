@@ -1,0 +1,6 @@
+<launch>
+    <node pkg="st_r17_calibration" name="scouter" type="scouter" output="screen">
+        <remap from="/joint_states" to="/st_r17/joint_states"/>
+        <remap from="/base_to_target" to="/ground_truth_viz"/> <!-- kind of a hack -->
+    </node>
+</launch>

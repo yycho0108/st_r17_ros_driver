@@ -56,7 +56,6 @@ class ScouterMoveGroupInterface{
 
 		moveit::planning_interface::MoveGroupInterface group;
 		const moveit::core::JointModelGroup& j_group;
-		geometry_msgs::Pose current_pose;
         ros::Subscriber gt_sub;
         std::vector<geometry_msgs::Point> ps;
 	public:
@@ -95,7 +94,7 @@ float random_uniform(float mn, float mx){
 void ScouterMoveGroupInterface::move(){
     float deg = M_PI / 180;
 
-    float r = random_uniform(0.5, 1.0);
+    float r = random_uniform(0.75, 1.5);
     float phi = random_uniform(15 * deg, 45 * deg);
     float theta = random_uniform(-M_PI, M_PI);
     //float theta = random_uniform(-1.0, 1.0);
@@ -109,6 +108,9 @@ void ScouterMoveGroupInterface::move(){
         theta += random_uniform(-1.0 * deg, 1.0 * deg);
         phi   = atan2(p.z, sqrt(p.y*p.y+p.x*p.x));
         phi   += random_uniform(-1.0 * deg, 1.0 * deg);
+    }else{
+        ROS_INFO_THROTTLE(1.0, "%d", ps.size());
+        return;
     }
 
     float x = r * cos(phi) * cos(theta);
@@ -196,12 +198,13 @@ bool ScouterMoveGroupInterface::moveToPose(const geometry_msgs::Pose& target_pos
 }
 
 void ScouterMoveGroupInterface::gt_cb(const geometry_msgs::PoseArrayConstPtr& msg){
-    if(ps.size() > 0) return;
-
-    for(auto& p : msg->poses){
-        ps.push_back(p.position);
+    if(msg->poses.size() > 0){
+        for(auto& p : msg->poses){
+            ps.push_back(p.position);
+        }
+        gt_sub.shutdown();
     }
-
+    //if(ps.size() > 0){
 }
 
 ScouterMoveGroupInterface::ScouterMoveGroupInterface(ros::NodeHandle& nh):
@@ -210,7 +213,6 @@ ScouterMoveGroupInterface::ScouterMoveGroupInterface(ros::NodeHandle& nh):
 	group("arm_group"),
 	j_group(*group.getRobotModel()->getJointModelGroup("arm_group"))
 {
-    gt_sub = nh.subscribe("/base_to_target", 10, &ScouterMoveGroupInterface::gt_cb, this);
 	// **** CONFIGURE GROUP **** //
 	group.setNumPlanningAttempts(8); // attempt three times
 
@@ -243,6 +245,9 @@ ScouterMoveGroupInterface::ScouterMoveGroupInterface(ros::NodeHandle& nh):
 	marker_msg.color.r = 1;
 	marker_msg.color.g = 0;
 	marker_msg.color.b = 1;
+
+    //wonder?
+    gt_sub = nh.subscribe("/base_to_target", 10, &ScouterMoveGroupInterface::gt_cb, this);
 }
 
 int main(int argc, char **argv)

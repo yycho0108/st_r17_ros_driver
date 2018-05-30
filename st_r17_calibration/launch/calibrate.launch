@@ -1,10 +1,13 @@
 <launch>
     <arg name="num_markers" default="4"/>
+    <arg name="noise" default="true"/>
+    <arg name="slop" default="0.005"/>
     <node name="dh_calibrator" pkg="st_r17_calibration" type="dh_calibrator_ros.py"
         output="screen"
         >
         <param name="num_markers" value="$(arg num_markers)"/>
-        <param name="noise" value="true"/> <!-- useful for testing in sim -->
+        <param name="noise" value="$(arg noise)"/> <!-- useful for testing in sim -->
+        <param name="slop" value="$(arg slop)"/>
         <rosparam command="load" file="$(find st_r17_calibration)/config/dh.yaml"/>
         <!--<remap from="stereo_to_target" to="/tag_detections"/>-->
         <remap from="joint_states" to="/st_r17/joint_states"/>

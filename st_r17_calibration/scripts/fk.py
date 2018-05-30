@@ -77,7 +77,8 @@ def main():
             ]
     _dh0 = np.float32(_dh0)
     _dh1 = np.loadtxt('/tmp/dhf.csv')
-    _dh1 = np.concatenate((_dh1, _dh0[:, -1, np.newaxis]), axis=-1)
+    print _dh0 - _dh1
+    #_dh1 = np.concatenate((_dh1, _dh0[:, -1, np.newaxis]), axis=-1)
 
     d_xyz = []
     d_rpy = []

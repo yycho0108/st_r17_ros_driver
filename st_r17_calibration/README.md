@@ -73,8 +73,8 @@ x (m)  | y (m) | z(m)  |R (deg)|P (deg)|Y (deg)|
     ```bash
     roscore
     roslaunch st_r17_gazebo gazebo.launch
-    roslaunch st_r17_gazebo spawn_tags.launch
-    rosrun st_r17_calibration gazebo_target_initializer.-y _num_markers:=4 tag_size:=0.5
+    roslaunch st_r17_gazebo spawn_tags.launch tag_size:=0.5
+    rosrun st_r17_calibration gazebo_target_initializer _num_markers:=4 tag_size:=0.5 _min_Y:=-1.0 _max_Y:=1.0
     ```
 
 2. Setup the Controls:
@@ -90,5 +90,6 @@ x (m)  | y (m) | z(m)  |R (deg)|P (deg)|Y (deg)|
     ```bash
     ROS_NAMESPACE=/left rosrun image_proc image_proc
     roslaunch st_r17_calibration apriltags.launch
-    rosrun st_r17_calibration dh_calibrator.py _num_markers:=4 stereo_to_target:=/tag_detections
+    roslaunch st_r17_calibration calibrate.launch num_markers:=4 slop:=0.01
+    roslaunch st_r17_calibration scouter.launch
     ```
