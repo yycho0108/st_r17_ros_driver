@@ -3,7 +3,7 @@
 import numpy as np
 import tensorflow as tf
 
-eps=np.finfo(float).eps*4.0
+eps=np.finfo(float).eps*16.0
 
 """ Utility """
 def T2xyzrpy(T):
@@ -16,21 +16,21 @@ def T2xyzrpy(T):
         z = T[...,2,3]
 
         cy = tf.sqrt(
-                tf.square(T[...,i, i]) + 
-                tf.square(T[...,j, i])
+                tf.square(T[...,i,i]) + 
+                tf.square(T[...,j,i])
                 )
 
-        eps_mask = tf.cast(tf.greater(cy, eps), tf.float32)
+        eps_mask = tf.greater(cy, eps)#, tf.float32)
 
-        ax0 = tf.atan2( T[...,k, j],  T[...,k,k])
-        ay = tf.atan2(-T[...,k, i],  cy)
-        az0 = tf.atan2( T[...,j, i],  T[...,i, i])
+        ax0 = tf.atan2( T[...,k,j],  T[...,k,k])
+        ay = tf.atan2(-T[...,k,i],  cy)
+        az0 = tf.atan2( T[...,j,i],  T[...,i,i])
 
-        ax1 = tf.atan2(-T[..., j, k],  T[..., j, j])
+        ax1 = tf.atan2(-T[...,j,k],  T[...,j,j])
         az1 = tf.zeros_like(az0)
 
-        ax = eps_mask * ax0 + (1.0 - eps_mask) * ax1 
-        az = eps_mask * az0 + (1.0 - eps_mask) * az1 
+        ax = tf.where(eps_mask, ax0, ax1)# * ax0 + (1.0 - eps_mask) * ax1 
+        az = tf.where(eps_mask, az0, az1)#eps_mask * az0 + (1.0 - eps_mask) * az1 
 
         #xyz = tf.stack([x,y,z], axis=-1)
         #rpy = tf.stack([ax,ay,az], axis=-1)
@@ -42,10 +42,9 @@ def T2xyzrpy_v2(T):
     return tf.concat(T[:3], axis=-1)
 
 def pinv(M):
-    Mt = tf.transpose(M)
-    MtM = tf.matmul(Mt, M)
+    MtM = tf.matmul(M, M, transpose_a=True)
     MtMi = tf.matrix_inverse(MtM)
-    return tf.matmul(MtMi, Mt)
+    return tf.matmul(MtMi, M, transpose_b=True)
 
 def dh2T(alpha, a, d, q):
     with tf.name_scope('dh2T', [alpha, a, d, q]):
@@ -163,13 +162,24 @@ class DHCalibrator(object):
             T = tf.einsum('aij,abjk->abik', T06, T_f) # apply landmarks transforms
 
         #mode = 'xyzrpy'
-        mode = 'Jacobian'
+        mode = 'Gradient'
+        #mode = 'Jacobian'
 
         # T_targ_67 = ...
         # TODO : inverse of homogeneous transform can be found a lot easier.
         # for now, leave in the simplest form.
-        T_targ_06 = tf.einsum('mij,bmjk->bmik', T_targ, tf.matrix_inverse(T_f))
-        # T_targ_06 = (N, M, 4, 4), all of which represent T06
+        
+        R = T_f[...,:3,:3]
+        d = T_f[...,:3,3:]
+        R_td = tf.matmul(R, d, transpose_a=True)
+        R_t = tf.matrix_transpose(R)
+        T_fi34 = tf.concat([R_t, -R_td], axis=-1)
+        T_fi4  = tf.ones_like(T_f[...,:1,:]) * np.reshape([0,0,0,1], [1,1,1,4])
+        T_fi44 = tf.concat([T_fi34,  T_fi4], axis=-2)
+
+        #T_targ_06 = tf.einsum('mij,bmjk->bmik', T_targ, tf.matrix_inverse(T_f))
+        T_targ_06 = tf.einsum('mij,bmjk->bmik', T_targ, T_fi44)
+        #T_targ_06 = (N, M, 4, 4), all of which represent T06
 
         pred_xyzRPY = T2xyzrpy_v2(T06) # == (N, 12)
         targ_xyzRPY = T2xyzrpy_v2(T_targ_06) # == (N, M, 12)
@@ -183,6 +193,13 @@ class DHCalibrator(object):
             targ_xyzRPY /= tf.reduce_sum(vis_f, axis=1, keep_dims=True) #(N,12)/(N,1)
 
             delta_xyzRPY = targ_xyzRPY - pred_xyzRPY # (N, 12)
+
+            #dxyz = delta_xyzRPY[:,:3]
+            #drpy = delta_xyzRPY[:,3:]
+            #drpy = tf.atan2(tf.sin(drpy), tf.cos(drpy))
+            #delta_xyzRPY = tf.concat([dxyz,drpy], axis=-1)
+
+            #with tf.control_dependencies([tf.Print(targ_xyzRPY, [tf.reduce_mean(tf.abs(delta_xyzRPY), axis=0)], message='xyzRPY', summarize=6)]):
             delta_xyzRPY_1 = tf.reshape(delta_xyzRPY, [-1, 1]) #(Nx12, 1)
 
             # Jacobian Methods
@@ -195,8 +212,9 @@ class DHCalibrator(object):
             d_dh = tf.matmul(pinv(psi), delta_xyzRPY_1)
             d_dh = tf.reshape(d_dh, dhps.shape) #d_dh = (Jx4) --> (J,4)
 
-            loss = tf.reduce_sum(tf.square(d_dh)) # update magnitude
-            train = tf.assign_add(dhps, 1e-1 * d_dh)
+            #loss = tf.reduce_sum(tf.square(d_dh)) # update magnitude
+            loss = tf.reduce_sum(tf.square(delta_xyzRPY))
+            train = tf.assign_add(dhps, 1e-2 * d_dh)
 
         # Simple Loss
         #loss = tf.reduce_mean(tf.square(delta_xyzRPY))
