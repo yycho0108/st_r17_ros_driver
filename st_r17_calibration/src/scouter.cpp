@@ -60,6 +60,8 @@ class ScouterMoveGroupInterface{
         std::vector<geometry_msgs::Point> ps;
 
         float noise;
+        float delay;
+
 	public:
 		ScouterMoveGroupInterface(ros::NodeHandle& nh);
 		bool moveToPose(const geometry_msgs::Pose& target_pose);
@@ -168,6 +170,8 @@ void ScouterMoveGroupInterface::move(){
     bool success = moveToPose(target_pose);
     if(!success){
         ROS_INFO("Failed to go to target : (%.2f), %.2f,%.2f,%.2f | %.2f,%.2f,%.2f", r, x,y,z,0.0,phi,theta);
+    }else{
+        ros::Duration(delay).sleep();
     }
 
     //geometry_msgs::Pose next_pose = current_pose;
@@ -255,6 +259,9 @@ ScouterMoveGroupInterface::ScouterMoveGroupInterface(ros::NodeHandle& nh):
 {
     if(! ros::param::get("~noise", noise)){
         noise = (M_PI / 180) * 1.0; // +-1 deg.
+    }
+    if(! ros::param::get("~delay", delay)){
+        delay = 0.0;
     }
 	// **** CONFIGURE GROUP **** //
 	group.setNumPlanningAttempts(8); // attempt three times

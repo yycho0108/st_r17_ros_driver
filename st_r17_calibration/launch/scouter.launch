@@ -1,8 +1,10 @@
 <launch>
     <arg name="noise" default="0.017"/>
+    <arg name="delay" default="0.0"/>
     <node pkg="st_r17_calibration" name="scouter" type="scouter" output="screen">
         <remap from="/joint_states" to="/st_r17/joint_states"/>
         <remap from="/base_to_target" to="/ground_truth_viz"/> <!-- kind of a hack -->
         <param name="~noise" value="$(arg noise)"/>
+        <param name="~delay" value="$(arg delay)"/>
     </node>
 </launch>

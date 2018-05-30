@@ -36,9 +36,9 @@ class DHCalibratorROS(object):
         self._step = 0
         self._last_update = 0
         self._update_step = 8
-        self._start_step  = 64 * 4
-        self._batch_size  = 64
-        self._mem_size    = 64 * 64
+        self._start_step  = 32 * 4
+        self._batch_size  = 32
+        self._mem_size    = 32 * 64
 
         # ~dh = nominal DH parameter
         self._dh = rospy.get_param('~dh', default=None)
@@ -49,7 +49,7 @@ class DHCalibratorROS(object):
         self._num_markers = rospy.get_param('~num_markers', default=1)
         self._noise = rospy.get_param('~noise', default=True)
         self._slop = rospy.get_param('~slop', default=0.01)
-        self._lr = rospy.get_param('~lr', default=5e-2)
+        self._lr = float(rospy.get_param('~lr', default=5e-2))
 
         if self._noise:
 
@@ -78,8 +78,8 @@ class DHCalibratorROS(object):
         self._Ys = [None for _ in range(self._num_markers)]
 
         self._sub = ApproximateSynchronizer(slop=self._slop, fs=[
-            message_filters.Subscriber('joint_states', JointState),
-            message_filters.Subscriber('stereo_to_target', AprilTagDetectionArray)
+            message_filters.Subscriber('joint_states', JointState), # ~50hz, 0.02
+            message_filters.Subscriber('stereo_to_target', AprilTagDetectionArray) # ~10hz, 0.1
             ], queue_size=20)
         self._gt_sub = rospy.Subscriber('base_to_target', AprilTagDetectionArray, self.ground_truth_cb) # fixed w.r.t. time
 
@@ -222,10 +222,13 @@ class DHCalibratorROS(object):
         self._dhf = dhs
 
     def save(self):
-        np.savetxt('/tmp/err.csv', self._errs)
-        np.savetxt('/tmp/dh0.csv', self._dh0) # initial DH
-        np.savetxt('/tmp/dhn.csv', self._dh)  # nominal DH
-        np.savetxt('/tmp/dhf.csv', self._dhf) # optimal DH (final)
+        try:
+            np.savetxt('/tmp/err.csv', self._errs)
+            np.savetxt('/tmp/dh0.csv', self._dh0) # initial DH
+            np.savetxt('/tmp/dhn.csv', self._dh)  # nominal DH
+            np.savetxt('/tmp/dhf.csv', self._dhf) # optimal DH (final)
+        except Exception as e:
+            print('Save Failed : {}'.format(e))
 
     def run(self):
         rate = rospy.Rate(50)
