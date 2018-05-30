@@ -48,6 +48,32 @@ struct solutionSort{
 	}	
 };
 
+void spawnFloor(moveit::planning_interface::PlanningSceneInterface& p){
+	std::vector<moveit_msgs::CollisionObject> v;
+
+	// add floor
+	moveit_msgs::CollisionObject floor;
+	floor.header.frame_id = "base_link";
+	floor.id = "floor";
+	shape_msgs::SolidPrimitive floor_geom;
+	floor_geom.type = floor_geom.BOX;
+	floor_geom.dimensions.push_back(5.0);
+	floor_geom.dimensions.push_back(5.0);
+	floor_geom.dimensions.push_back(0.05);
+	geometry_msgs::Pose floor_pose;
+	floor_pose.orientation.w = 1;
+	floor_pose.position.x = 0;
+	floor_pose.position.y = 0;
+	floor_pose.position.z = -0.025;
+	floor.primitives.push_back(floor_geom);
+	floor.primitive_poses.push_back(floor_pose);
+	floor.operation = floor.ADD;
+	v.push_back(floor);
+
+	p.applyCollisionObjects(v);
+	return;
+}
+
 class ScouterMoveGroupInterface{
 	private:
 		const ros::NodeHandle& nh;
@@ -277,7 +303,7 @@ ScouterMoveGroupInterface::ScouterMoveGroupInterface(ros::NodeHandle& nh):
 
 	// **** SETUP ENVIRONMENT **** //
 	moveit::planning_interface::PlanningSceneInterface planning_scene_interface;  
-	//spawnObject(planning_scene_interface);
+	spawnFloor(planning_scene_interface);
 
 	// **** DISPLAY RELEVANT INFO **** //
 	ROS_INFO("Reference frame (Plan): %s", group.getPlanningFrame().c_str());

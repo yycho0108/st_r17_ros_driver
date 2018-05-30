@@ -78,7 +78,7 @@ void spawnObject(moveit::planning_interface::PlanningSceneInterface& p){
 	table_pose.orientation.w = 1;
 	table_pose.position.x = 0.55;
 	table_pose.position.y = 0;
-	table_pose.position.z = -0.05;
+	table_pose.position.z = -0.025;
 	table.primitives.push_back(table_geom);
 	table.primitive_poses.push_back(table_pose);
 	table.operation = table.ADD;
