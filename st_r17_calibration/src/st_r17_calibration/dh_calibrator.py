@@ -184,7 +184,7 @@ class DHCalibrator(object):
 
         if mode != 'Jacobian':
             #loss = tf.square(tf.expand_dims(pred_xyzRPY,1) - targ_xyzRPY) # self position loss, dynamic
-            loss = tf.square(tf.expand_dims(T_targ - T)) # object location loss, static
+            loss = tf.square(tf.expand_dims(T_targ,axis=0) - T) # object location loss, static
             loss = tf.reduce_sum(loss * vis_f[..., tf.newaxis, tf.newaxis]) / (16.0 * tf.reduce_sum(vis_f))
             train = tf.train.AdamOptimizer(learning_rate=1e-2).minimize(loss)
         else:

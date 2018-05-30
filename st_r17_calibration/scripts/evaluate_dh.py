@@ -1,28 +1,11 @@
-import numpy as np
-import tf.transformations as tx
-
-def dh2T(alpha, a, d, dq, q):
-    """ Convert DH Parameters to Transformation Matrix """
-    cq = np.cos(q + dq)
-    sq = np.sin(q + dq)
-    ca = np.cos(alpha)
-    sa = np.sin(alpha)
-    return np.float32([
-        [cq, -sq, 0, a],
-        [sq*ca, cq*ca, -sa, -sa*d],
-        [sq*sa, cq*sa, ca, ca*d],
-        [0, 0, 0, 1]
-        ])
-
-def fk(dhs, qs):
-    Ts = [dh2T(*dh, q=q) for (dh,q) in zip(dhs, qs)]
-    T = reduce(lambda a,b : np.matmul(a,b), Ts) # base_link -> object
-    txn = tx.translation_from_matrix(T)
-    rxn = tx.quaternion_from_matrix(T)
-    return txn, rxn
+#!/usr/bin/python2
 
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from st_r17_calibration.kinematics import fk
+
+import numpy as np
+import tf.transformations as tx
 
 def hide_axis(ax):
     """ Hide Axis (Dummy) """
@@ -56,28 +39,39 @@ def characterize(txn_err, rxn_err):
     ax_q.set_ylabel('P')
     ax_q.set_zlabel('Y')
     
-
     ax_p.scatter(txn_err[:,0], txn_err[:,1], txn_err[:,2])
     ax_q.scatter(rxn_err[:,0], rxn_err[:,1], rxn_err[:,2])
 
-    plt.show()
+    #plt.show()
+
+def plot_error(ax):
+    e = np.loadtxt('/tmp/err.csv')
+    ax.plot(e)
+    plt.title('DH Parameter Error Over Time')
+    plt.grid()
+    plt.xlabel('Step')
+    plt.ylabel('DH Parameter MSE')
+    #plt.show()
 
 def asub(a, b):
+    """ Angular Residual """
     dx = np.subtract(a,b)
     return np.arctan2(np.sin(dx), np.cos(dx))
 
 def main():
-    _dh0 = [
-            [np.pi, 0, -(0.033 + 0.322), 0],
-            [np.pi/2, 0, 0, -np.pi/2],
-            [0, 0.375, 0, 0],
-            [0, 0.375, 0.024, np.pi/2],
-            [np.pi/2, 0, 0.042, 1.176],
-            [0, -0.012, 0.159, np.pi]
-            ]
-    _dh0 = np.float32(_dh0)
+    """
+    Requires:
+        - '/tmp/err.csv' : DH Error over time
+        - '/tmp/dhn.csv' : Nominal DH Parameter
+        - '/tmp/dhf.csv' : Final DH Parameter
+
+    As produced by dh_calibrator_ros.py after optimization.
+    """
+
+    _dh0 = np.loadtxt('/tmp/dhn.csv')
     _dh1 = np.loadtxt('/tmp/dhf.csv')
-    print _dh0 - _dh1
+
+    print ('Final Error : ', _dh0 - _dh1)
     #_dh1 = np.concatenate((_dh1, _dh0[:, -1, np.newaxis]), axis=-1)
 
     d_xyz = []
@@ -99,6 +93,11 @@ def main():
     print('d_rpy', np.mean(np.abs(d_rpy), axis=0))
     characterize(d_xyz, d_rpy)
 
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    plot_error(ax)
+
+    plt.show()
 
 if __name__ == "__main__":
     main()

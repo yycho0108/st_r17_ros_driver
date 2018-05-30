@@ -93,3 +93,9 @@ x (m)  | y (m) | z(m)  |R (deg)|P (deg)|Y (deg)|
     roslaunch st_r17_calibration calibrate.launch num_markers:=4 slop:=0.01
     roslaunch st_r17_calibration scouter.launch
     ```
+
+4. Evaluate Performance:
+
+    ```bash
+    rosrun st_r17_calibration evaluate_dh.py
+    ```

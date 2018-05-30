@@ -11,7 +11,7 @@ from gazebo_msgs.srv import SetModelState, SetModelStateRequest, SetModelStateRe
 import tf
 import tf.transformations as tx
 
-from fk import fk
+from st_r17_calibration.kinematics import fk
 
 def fill_pose_msg(msg, txn, rxn):
     msg.position.x = txn[0]

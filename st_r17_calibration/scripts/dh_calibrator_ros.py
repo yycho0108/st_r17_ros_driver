@@ -9,15 +9,14 @@ import tf.transformations as tx
 import functools
 
 import message_filters
-from approx_sync import ApproximateSynchronizer
 from collections import deque, defaultdict
 
 from geometry_msgs.msg import Pose, PoseStamped, PoseWithCovarianceStamped, PoseArray
 from sensor_msgs.msg import JointState
 from apriltags2_ros.msg import AprilTagDetectionArray, AprilTagDetection
 
+from st_r17_calibration.approx_sync import ApproximateSynchronizer
 from st_r17_calibration.dh_calibrator import DHCalibrator
-# using ^ as placeholder for now
 
 def fill_pose_msg(msg, txn, rxn):
     msg.position.x = txn[0]
@@ -223,8 +222,9 @@ class DHCalibratorROS(object):
 
     def save(self):
         np.savetxt('/tmp/err.csv', self._errs)
-        np.savetxt('/tmp/dh0.csv', self._dh0)
-        np.savetxt('/tmp/dhf.csv', self._dhf)
+        np.savetxt('/tmp/dh0.csv', self._dh0) # initial DH
+        np.savetxt('/tmp/dhn.csv', self._dh)  # nominal DH
+        np.savetxt('/tmp/dhf.csv', self._dhf) # optimal DH (final)
 
     def run(self):
         rate = rospy.Rate(50)
