@@ -5,7 +5,7 @@ address: 1000 Olin Way, Needham, Ma
 phone: (+1) 213-220-3492
 description: > # this means to ignore newlines until "baseurl:"
     ROS Interface for the ST-R17 Robot Arm from ST Robotics
-baseurl: "" # the subpath of your site, e.g. /blog
+baseurl: "/st_r17_ros_driver" # the subpath of your site, e.g. /blog
 github_username: yycho0108
 # Build settings
 markdown: kramdown
