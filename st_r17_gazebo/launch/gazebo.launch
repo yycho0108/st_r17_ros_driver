@@ -1,10 +1,18 @@
 <launch>
-    <include file="$(find gazebo_ros)/launch/empty_world.launch" />
+    <arg name="world" default="$(find st_r17_gazebo)/models/default.world"/>
+    <arg name="gui" default="true"/>
+    <include file="$(find gazebo_ros)/launch/empty_world.launch">
+        <arg name="world_name" value="$(arg world)"/>
+        <arg name="gui" value="$(arg gui)"/>
+    </include>
+
     <include file="$(find st_r17_description)/launch/urdf.launch">
         <arg name="use_kinect" value="true"/>
         <arg name="ns" value="st_r17"/>
     </include>
+
     <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen" args="-urdf -model st_r17 -param robot_description" />
+
     <!-- For Gazebo? -->
     <node
         name="fake_joint_calibration"

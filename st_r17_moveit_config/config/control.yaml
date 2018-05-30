@@ -9,7 +9,8 @@ st_r17:
             - hand
             - wrist
         constraints:
-            goal_time: 5.0
+            goal_time: 1.0
+            stopped_velocity_tolerance: 0.05
             waist:
                 goal: 1.0
             shoulder:
@@ -37,7 +38,8 @@ controller_list:
         - hand
         - wrist
     constraints:
-        goal_time: 5.0
+        goal_time: 1.0
+        stopped_velocity_tolerance: 0.05
         waist:
             goal: 1.0
         shoulder:

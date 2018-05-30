@@ -142,7 +142,11 @@ void ScouterMoveGroupInterface::move(){
 }
 
 bool ScouterMoveGroupInterface::moveToPose(const geometry_msgs::Pose& target_pose){
+
 	group.setStartStateToCurrentState();
+    group.setGoalJointTolerance(0.034);
+    group.setGoalOrientationTolerance(0.034);
+    group.setGoalPositionTolerance(0.05);
 
     moveit::planning_interface::MoveGroupInterface::Plan my_plan;
 
