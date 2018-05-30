@@ -61,6 +61,7 @@ class ScouterMoveGroupInterface{
 	public:
 		ScouterMoveGroupInterface(ros::NodeHandle& nh);
 		bool moveToPose(const geometry_msgs::Pose& target_pose);
+        void test();
         void move();
         void gt_cb(const geometry_msgs::PoseArrayConstPtr& msg);
 };
@@ -91,10 +92,43 @@ float random_uniform(float mn, float mx){
 //    return q;
 //}
 
+void ScouterMoveGroupInterface::test(){
+
+    float deg = M_PI / 180;
+    float r = random_uniform(0.5, 1.2);
+    float phi = random_uniform(0 * deg, 90 * deg);
+    float theta = random_uniform(-M_PI, M_PI);
+
+    float x = r * cos(phi) * cos(theta);
+    float y = r * cos(phi) * sin(theta);
+    float z = r * sin(phi);
+
+    tf::Quaternion q;
+    q = tf::createQuaternionFromRPY(0.0, -phi, theta);
+    
+    geometry_msgs::Pose target_pose;
+
+    tf::quaternionTFToMsg(q, target_pose.orientation);
+
+    target_pose.position.x = x;
+    target_pose.position.y = y;
+    target_pose.position.z = z;
+
+	group.setStartStateToCurrentState();
+    group.setGoalJointTolerance(0.034);
+    group.setGoalOrientationTolerance(0.034);
+    group.setGoalPositionTolerance(0.05);
+    moveit::planning_interface::MoveGroupInterface::Plan my_plan;
+    // plan #1 : simply try to plan for target pose
+    group.setPoseTarget(target_pose);
+    bool success = check_moveit(group.plan(my_plan));
+    std::cout << int(success) << ',' << r << ',' << phi << ',' << theta << std::endl;
+}
+
 void ScouterMoveGroupInterface::move(){
     float deg = M_PI / 180;
 
-    float r = random_uniform(0.75, 1.5);
+    float r = random_uniform(0.75, 1.2);
     float phi = random_uniform(15 * deg, 45 * deg);
     float theta = random_uniform(-M_PI, M_PI);
     //float theta = random_uniform(-1.0, 1.0);
@@ -131,7 +165,7 @@ void ScouterMoveGroupInterface::move(){
 
     bool success = moveToPose(target_pose);
     if(!success){
-        ROS_INFO("Failed to go to target : %.2f,%.2f,%.2f | %.2f,%.2f,%.2f", x,y,z,0.0,phi,theta);
+        ROS_INFO("Failed to go to target : (%.2f), %.2f,%.2f,%.2f | %.2f,%.2f,%.2f", r, x,y,z,0.0,phi,theta);
     }
 
     //geometry_msgs::Pose next_pose = current_pose;
@@ -268,6 +302,7 @@ int main(int argc, char **argv)
 	ros::Rate r = ros::Rate(50.0);
 	while(ros::ok()){
 		ros::spinOnce();
+        //scouter.test();
         scouter.move();
 		r.sleep();
 	}

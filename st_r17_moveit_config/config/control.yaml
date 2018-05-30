@@ -12,15 +12,15 @@ st_r17:
             goal_time: 1.0
             stopped_velocity_tolerance: 0.05
             waist:
-                goal: 1.0
+                goal: 0.05
             shoulder:
-                goal: 1.0
+                goal: 0.05
             elbow:
-                goal: 1.0
+                goal: 0.05
             hand:
-                goal: 1.0
+                goal: 0.05
             wrist:
-                goal: 1.0
+                goal: 0.05
 
     joint_state_controller:
         type: joint_state_controller/JointStateController
@@ -41,12 +41,12 @@ controller_list:
         goal_time: 1.0
         stopped_velocity_tolerance: 0.05
         waist:
-            goal: 1.0
+            goal: 0.05
         shoulder:
-            goal: 1.0
+            goal: 0.05
         elbow:
-            goal: 1.0
+            goal: 0.05
         hand:
-            goal: 1.0
+            goal: 0.05
         wrist:
-            goal: 1.0
+            goal: 0.05
