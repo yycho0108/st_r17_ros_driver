@@ -141,8 +141,7 @@ class DHCalibrator(object):
         self._graph = tf.get_default_graph()
         # inputs ...
         with tf.name_scope('inputs'):
-            dhps, qs = self._dhs(self._dh0)
-            #dhs, dhps, qs = zip(*[self._dh(i, *_dh) for (i, _dh) in enumerate(self._dh0)])
+            dhs, qs = self._dhs(self._dh0)
             T_f = tf.placeholder(dtype=tf.float32, shape=[None, self._m, 4,4], name='T_f') # camera_link -> object(s)
             vis = tf.placeholder(dtype=tf.bool, shape=[None, self._m], name='vis') # marker visibility
             T_targ = tf.placeholder(dtype=tf.float32, shape=[self._m, 4, 4], name='T_targ')
@@ -152,8 +151,6 @@ class DHCalibrator(object):
 
         # build  transformation ...
         with tf.name_scope('transforms'):
-            #Ts = [dh2T(*dh) for dh in dhs] # == (N, 4, 4)
-
             dhps_j = tf.unstack(dhps, axis=0)
             qs_j = tf.unstack(qs, axis=1)
             Ts = [dh2Tv2(dh,q) for (dh,q) in zip(dhps_j,qs_j)]
