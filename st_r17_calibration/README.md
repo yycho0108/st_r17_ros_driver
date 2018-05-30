@@ -50,6 +50,8 @@ x (m)  | y (m) | z(m)  |R (deg)|P (deg)|Y (deg)|
 
 ## Run DH Calibration (Virtual)
 
+![calib.gif](figs/calib.gif)
+
 [Youtube Link](https://www.youtube.com/watch?v=DozXbHvRHp8)
 
 1. Run the perception stack for detecting target markers.
