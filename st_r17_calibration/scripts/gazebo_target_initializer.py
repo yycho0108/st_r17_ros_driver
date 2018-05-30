@@ -57,6 +57,8 @@ class GazeboTargetInitializer(object):
         self._num_markers = rospy.get_param('~num_markers', default=1)
         self._tag_size = rospy.get_param('~tag_size', default=0.1)
 
+        self._min_r = rospy.get_param('~min_r', default=2.5) # not roll, radius
+        self._max_r = rospy.get_param('~max_r', default=4.0)
         self._min_Y = rospy.get_param('~min_Y', default=-np.pi)
         self._max_Y = rospy.get_param('~max_Y', default=np.pi)
         self._min_P = rospy.get_param('~min_P', default=np.deg2rad(10))
@@ -64,6 +66,8 @@ class GazeboTargetInitializer(object):
 
         xyz, rpy = get_xyz_rpy(self._num_markers,
                 min_z = self._tag_size,
+                min_r = self._min_r,
+                max_r = self._max_r,
                 min_phi = self._min_P,
                 max_phi = self._max_P,
                 min_theta = self._min_Y,

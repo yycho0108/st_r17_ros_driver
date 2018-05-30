@@ -11,11 +11,10 @@ Currently, the seeds are configured for the ST R17 Arm, but the implementation i
 ### Gazebo simulation
 
 [Youtube Link](https://youtu.be/T6hWMyOZmXE)
+
 ![gz\_dh\_err](figs/gz_dh_err.png)
 
 #### DH Parameters
-
-Unfortunately, calibrated joint angle biases were not recorded.
 
 Nominal:
 
@@ -28,29 +27,44 @@ Nominal:
 &pi;/2   | 0        | 0.042    | 1.176    |
 0        | -0.012   | 0.159    | &pi;     |
 
+Initial:
+
+&alpha;  | a        |d         | &Delta;q |
+:-------:|:--------:|:--------:|:--------:|
+3.06     | 5.13e-2  | -3.51e-1 | -1.76e-2 |
+1.68     | -1.34e-2 | 7.94e-3  | -1.61    |
+-2.72e-2 | 3.74e-1  | 3.72e-2  | 2.53e-2  |
+4.51e-2  | 3.83e-1  | 2.02e-2  | 1.57     |
+1.53     | 1.81e-3  | 9.19e-2  | 1.15     |
+-3.55e-2 | -2.13e-2 | 1.46e-1  | 3.17     |
+
 Calibrated:
 
 &alpha;  | a        |d         | &Delta;q |
 :-------:|:--------:|:--------:|:--------:|
-3.1407   |4.62e-4   | -0.373   | N/A      |
-1.5714   |-7.18e-3  | 0.029    | N/A      |
--1.04e-3 | 0.385    | -0.028   | N/A      |
--1.94e-3 | 0.380    | 0.027    | N/A      |
-1.5703   | 2.12e-3  | 0.060    | N/A      |
-1.40e-3  | -6.15e-3 | 0.1274   | N/A      |
+3.14     | 2.85e-3  | -3.66e-1 | 2.53e-3  |
+1.57     | -2.64e-3 | -1.96e-2 | -1.60    |
+-4.00e-3 | 3.79e-1  | 2.39e-2  | 1.79e-2  |
+-2.27e-3 | 3.81e-1  | 2.21e-2  | 1.58     |
+1.57     | 1.77e-2  | 7.99e-02 | 1.16     |
+-5.80e-4 | 1.88e-3  | 1.11e-1  | 3.17     |
 
 #### Kinematic Error
 
+![pos\_err.png](figs/pos_err.png)
+
 ![kin\_err.png](figs/kin_err.png)
+
 Mean Absolute Error over 1000 Samples:
 
 x (m)  | y (m) | z(m)  |R (deg)|P (deg)|Y (deg)|
 :-----:|:-----:|:-----:|:-----:|:-----:|:-----:|
-8.32e-3|8.44e-3|1.87e-2|1.03e-1|7.65e-2|4.72e-1|
+1.29e-2|1.21e-2|1.73e-2|3.10e-1|2.58e-1|4.54e-1|
+
 
 ## Run DH Calibration (Virtual)
 
-![calib.gif](figs/calib.gif)
+![calib\_virtual.gif](figs/calib_virtual.gif)
 
 [Youtube Link](https://www.youtube.com/watch?v=DozXbHvRHp8)
 
@@ -60,7 +74,7 @@ x (m)  | y (m) | z(m)  |R (deg)|P (deg)|Y (deg)|
     
     ```bash
     roscore
-    roslaunch st_r17_calibration urdf.launch use_kinect:=false
+    roslaunch st_r17_description urdf.launch use_kinect:=false
     rosrun st_r17_calibration target_publisher.py _num_markers:=4 _zero:=false _rate:=100
     rviz -d $(rospack find st_r17_description)/rviz/dh.rviz
     ```
@@ -71,6 +85,8 @@ x (m)  | y (m) | z(m)  |R (deg)|P (deg)|Y (deg)|
     ```
 
 ## Run DH Calibration (Gazebo + Vision):
+
+![calib.gif](figs/calib.gif)
 
 1. Setup the World:
 

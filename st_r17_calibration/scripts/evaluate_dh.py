@@ -51,6 +51,10 @@ def characterize_v2(xyz, rpy, err):
     xyz = np.float32(xyz)
     rpy = np.float32(rpy)
     fig = plt.figure()
+    
+    ax0 = fig.add_subplot(111)
+    ax0.set_title('Error Visualization By Position')
+    hide_axis(ax0)
 
     cm0 = matplotlib.cm.get_cmap('cool')
     cm = cm0(np.arange(cm0.N))
