@@ -53,7 +53,9 @@ def qmul(qa, qb):
     vb = tf.ones_like(va) * vb
     rc = ra*rb - tf.reduce_sum(va*vb, axis=-1, keepdims=True)
     vc = ra*vb + rb*va + tf.cross(va,vb)
-    return tf.concat((vc,rc), axis=-1)
+    q = tf.concat((vc,rc), axis=-1)
+    q = q / tf.norm(q, keepdims=True)
+    return q
 
 def qlog(q):
     """ assume unit quaternion """
