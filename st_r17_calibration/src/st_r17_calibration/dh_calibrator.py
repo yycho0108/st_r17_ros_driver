@@ -41,6 +41,56 @@ def T2xyzrpy_v2(T):
     T = tf.unstack(T, axis=-2) #
     return tf.concat(T[:3], axis=-1)
 
+def qinv(q):
+    """ assume unit quaternion """
+    qx,qy,qz,qw = tf.unstack(q, axis=-1)
+    return tf.stack([-qx,-qy,-qz,qw], axis=-1)
+
+def qmul(qa, qb):
+    """ assume unit quaterion """
+    va, ra = tf.split(qa, [3, 1], axis=-1)
+    vb, rb = tf.split(qb, [3, 1], axis=-1)
+    vb = tf.ones_like(va) * vb
+    rc = ra*rb - tf.reduce_sum(va*vb, axis=-1, keepdims=True)
+    vc = ra*vb + rb*va + tf.cross(va,vb)
+    return tf.concat((vc,rc), axis=-1)
+
+def qlog(q):
+    """ assume unit quaternion """
+    va, ra = tf.split(q, [3,1], axis=-1)
+    uv = va / tf.norm(va, axis=-1, keepdims=True)
+    return uv * tf.acos(ra)
+
+def check_nan(t, msg=''):
+    c = tf.reduce_any(tf.is_nan(t))
+    return tf.Print(t, [c], message=msg)
+
+def T2err(Ta, Tb):
+    with tf.name_scope('T2err', [Ta,Tb]):
+        a_xyz = Ta[...,:3,3]
+        b_xyz = Tb[...,:3,3]
+
+        a_q = T2q(Ta)
+        b_q = T2q(Tb)
+
+        dxyz = a_xyz - b_xyz
+
+        b_qi = qinv(b_q)
+        qm = qmul(a_q, b_qi)
+        dq = qlog(qm)
+
+        #cnb = check_nan(b_qi, 'b_qi')
+        #cnqm = check_nan(qm, 'qm')
+        #cndq = check_nan(dq, 'dq')
+
+        #na = tf.reduce_any(tf.is_nan(Ta))
+        #nb = tf.reduce_any(tf.is_nan(Tb))
+        #nq = tf.reduce_any(tf.is_nan(dq))
+        #pr = tf.Print(Ta, [na,nb,nq], message='nancheck')
+        #with tf.control_dependencies([cnb, cnqm, cndq, pr]):
+        err = tf.concat([dxyz,dq], axis=-1) # [...x6]
+    return err
+
 def pinv(M):
     MtM = tf.matmul(M, M, transpose_a=True)
     MtMi = tf.matrix_inverse(MtM)
@@ -94,6 +144,64 @@ def dh2Tv2(dh, q):
         T = tf.transpose(T, [2,0,1]) # --> (N,4,4)
     return T
 
+def T2q(T):
+    # accepts (..., 4, 4) homogeneous transformation matrix
+    t = tf.trace(T)
+    s = tf.unstack(tf.shape(T))
+    T_flat = tf.reshape(T, s[:-2]+[16])
+
+    \
+            T00,T01,T02,T03,\
+            T10,T11,T12,T13,\
+            T20,T21,T22,T23,\
+            T30,T31,T32,T33 = tf.unstack(T_flat, axis=-1)
+
+    # opt 1 : t > T[..., 3,3]
+    q1 = [
+            T21-T12,
+            T02-T20,
+            T10-T01,
+            t,
+            ]
+    q1 = tf.stack(q1, axis=-1)
+    q1 = 0.5 * q1 / tf.expand_dims(tf.sqrt(t * T33), -1)
+
+    # opt 2 :
+    Td = tf.matrix_diag_part(T)[..., :3] #needed?
+    qmx = tf.cast(tf.argmax(Td, axis=-1), tf.int32)
+
+    q_mx0 = tf.stack([
+        T00-T11-T22+T33,
+        T01+T10,
+        T20+T02,
+        T21-T12], axis=-1)
+    q_mx1 = tf.stack([
+        T01+T10,
+        T11-T22-T00+T33,
+        T12+T21,
+        T02-T20], axis=-1)
+    q_mx2 = tf.stack([
+        T20+T02,
+        T12+T21,
+        T22-T00-T11+T33,
+        T10-T01], axis=-1)
+
+    # is this faster than the following?
+
+    # opt 2.1 : stack + gather
+    #qmx3 = tf.stack([q_mx0, q_mx1, q_mx2], axis=0)
+    #q2 = tf.gather(qmx3, qmx)
+
+    # opt 2.2 : cast + add
+    mx0 = tf.expand_dims(tf.cast(tf.equal(qmx, 0), tf.float32), axis=-1)
+    mx1 = tf.expand_dims(tf.cast(tf.equal(qmx, 1), tf.float32), axis=-1)
+    mx2 = tf.expand_dims(tf.cast(tf.equal(qmx, 2), tf.float32), axis=-1)
+    q2 = (q_mx0*mx0 + q_mx1*mx1 + q_mx2*mx2)
+
+    sel = tf.cast((t>T33)[..., tf.newaxis], tf.float32)
+    q = sel*q1 + (1.0-sel)*q2
+    q = q / tf.norm(q, axis=-1, keepdims=True)
+    return q
 
 def jacobian(y, x):
     n = tf.shape(y)[0]
@@ -157,7 +265,6 @@ class DHCalibrator(object):
             qs_j = tf.unstack(qs, axis=1)
             Ts = [dh2Tv2(dh,q) for (dh,q) in zip(dhs_j,qs_j)]
             T06 = reduce(lambda a,b : tf.matmul(a,b), Ts) # base_link -> stereo_optical_link
-
             T = tf.einsum('aij,abjk->abik', T06, T_f) # apply landmarks transforms
 
         #mode = 'xyzrpy'
@@ -180,41 +287,55 @@ class DHCalibrator(object):
         T_targ_06 = tf.einsum('mij,bmjk->bmik', T_targ, T_fi44)
         #T_targ_06 = (N, M, 4, 4), all of which represent T06
 
-        pred_xyzRPY = T2xyzrpy_v2(T06) # == (N, 12)
-        targ_xyzRPY = T2xyzrpy_v2(T_targ_06) # == (N, M, 12)
+        loss = T2err(T, tf.expand_dims(T_targ, axis=0))
+        loss = tf.square(loss)
+        loss = tf.reduce_sum(loss * vis_f[..., tf.newaxis]) / (9.0 * tf.reduce_sum(vis_f))
 
-        if mode != 'Jacobian':
-            #loss = tf.square(tf.expand_dims(pred_xyzRPY,1) - targ_xyzRPY) # self position loss, dynamic
-            loss = tf.square(tf.expand_dims(T_targ,axis=0) - T) # object location loss, static
-            loss = tf.reduce_sum(loss * vis_f[..., tf.newaxis, tf.newaxis]) / (16.0 * tf.reduce_sum(vis_f))
-            train = tf.train.AdamOptimizer(learning_rate=self._lr).minimize(loss)
-        else:
-            targ_xyzRPY = tf.reduce_sum(targ_xyzRPY * vis_f[..., tf.newaxis], axis=1) # (N, 12)
-            targ_xyzRPY /= tf.reduce_sum(vis_f, axis=1, keep_dims=True) #(N,12)/(N,1)
+        params = [dhs]
 
-            delta_xyzRPY = targ_xyzRPY - pred_xyzRPY # (N, 12)
+        grad = tf.gradients(loss, params)
+        gnan = tf.reduce_any(tf.is_nan(grad))
+        #with tf.control_dependencies([gnan]):
+        opt = tf.train.AdamOptimizer(learning_rate=self._lr)
+        train = tf.cond(gnan, lambda:tf.no_op(), lambda:opt.apply_gradients(zip(grad, params)))
+        #train = opt.apply_gradients( zip(grad, params))
+            #train = tf.train.AdamOptimizer(learning_rate=self._lr).minimize(loss)
 
-            #dxyz = delta_xyzRPY[:,:3]
-            #drpy = delta_xyzRPY[:,3:]
-            #drpy = tf.atan2(tf.sin(drpy), tf.cos(drpy))
-            #delta_xyzRPY = tf.concat([dxyz,drpy], axis=-1)
+        #pred_xyzRPY = T2xyzrpy_v2(T06) # == (N, 12)
+        #targ_xyzRPY = T2xyzrpy_v2(T_targ_06) # == (N, M, 12)
 
-            #with tf.control_dependencies([tf.Print(targ_xyzRPY, [tf.reduce_mean(tf.abs(delta_xyzRPY), axis=0)], message='xyzRPY', summarize=6)]):
-            delta_xyzRPY_1 = tf.reshape(delta_xyzRPY, [-1, 1]) #(Nx12, 1)
+        #if mode != 'Jacobian':
+        #    #loss = tf.square(tf.expand_dims(pred_xyzRPY,1) - targ_xyzRPY) # self position loss, dynamic
+        #    loss = tf.square(tf.expand_dims(T_targ,axis=0) - T) # object location loss, static
+        #    loss = tf.reduce_sum(loss * vis_f[..., tf.newaxis, tf.newaxis]) / (16.0 * tf.reduce_sum(vis_f))
+        #    train = tf.train.AdamOptimizer(learning_rate=self._lr).minimize(loss)
+        #else:
+        #    targ_xyzRPY = tf.reduce_sum(targ_xyzRPY * vis_f[..., tf.newaxis], axis=1) # (N, 12)
+        #    targ_xyzRPY /= tf.reduce_sum(vis_f, axis=1, keep_dims=True) #(N,12)/(N,1)
 
-            # Jacobian Methods
-            pred_xyzRPY_1 = tf.reshape(pred_xyzRPY, [-1]) # (Nx12,)
+        #    delta_xyzRPY = targ_xyzRPY - pred_xyzRPY # (N, 12)
 
-            psi = jacobian(pred_xyzRPY_1, dhs) #(Nx12, J, 4)
-            BS,_,J,_ = tf.unstack(tf.shape(psi))
-            psi = tf.reshape(psi, [BS, J*4])
+        #    #dxyz = delta_xyzRPY[:,:3]
+        #    #drpy = delta_xyzRPY[:,3:]
+        #    #drpy = tf.atan2(tf.sin(drpy), tf.cos(drpy))
+        #    #delta_xyzRPY = tf.concat([dxyz,drpy], axis=-1)
 
-            d_dh = tf.matmul(pinv(psi), delta_xyzRPY_1)
-            d_dh = tf.reshape(d_dh, dhs.shape) #d_dh = (Jx4) --> (J,4)
+        #    #with tf.control_dependencies([tf.Print(targ_xyzRPY, [tf.reduce_mean(tf.abs(delta_xyzRPY), axis=0)], message='xyzRPY', summarize=6)]):
+        #    delta_xyzRPY_1 = tf.reshape(delta_xyzRPY, [-1, 1]) #(Nx12, 1)
 
-            #loss = tf.reduce_sum(tf.square(d_dh)) # update magnitude
-            loss = tf.reduce_sum(tf.square(delta_xyzRPY))
-            train = tf.assign_add(dhs, 1e-2 * d_dh)
+        #    # Jacobian Methods
+        #    pred_xyzRPY_1 = tf.reshape(pred_xyzRPY, [-1]) # (Nx12,)
+
+        #    psi = jacobian(pred_xyzRPY_1, dhs) #(Nx12, J, 4)
+        #    BS,_,J,_ = tf.unstack(tf.shape(psi))
+        #    psi = tf.reshape(psi, [BS, J*4])
+
+        #    d_dh = tf.matmul(pinv(psi), delta_xyzRPY_1)
+        #    d_dh = tf.reshape(d_dh, dhs.shape) #d_dh = (Jx4) --> (J,4)
+
+        #    #loss = tf.reduce_sum(tf.square(d_dh)) # update magnitude
+        #    loss = tf.reduce_sum(tf.square(delta_xyzRPY))
+        #    train = tf.assign_add(dhs, 1e-2 * d_dh)
 
         # Simple Loss
         #loss = tf.reduce_mean(tf.square(delta_xyzRPY))
