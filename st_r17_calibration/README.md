@@ -6,6 +6,9 @@ DH Parameter Calibration with April Tags.
 
 Currently, the seeds are configured for the ST R17 Arm, but the implementation is universal for all robot arms.
 
+Currently Depends on the [apriltags2\_ros](https://github.com/dmalyuta/apriltags2_ros) package for fiducial detection.
+
+
 ## Results
 
 ### Gazebo simulation
