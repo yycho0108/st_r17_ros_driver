@@ -102,6 +102,7 @@ class GraphSlam3(object):
         #dx = np.matmul(np.linalg.pinv(H), -B)
         dx = np.linalg.lstsq(H+mI,-B, rcond=None)[0]
         dx = np.reshape(dx, [-1,6]) # [x1, l0, ... ln]
+        print np.sum(np.abs(dx))
 
         for i in zis:
             self._nodes[i] = qmath_np.xadd_abs(self._nodes[i], dx[i-1])

@@ -45,6 +45,7 @@ class SimpleTargetPublisher(object):
         self._zero = rospy.get_param('~zero', default=False)
         self._smooth = rospy.get_param('~smooth', default=True)
         self._num_markers = rospy.get_param('~num_markers', default=1)
+        self._noise = rospy.get_param('~noise', default=False)
         self._p = rospy.get_param('~p', default=0.5) # visibility
 
         xyz = np.random.uniform(low = -1.0, high = 1.0, size=(self._num_markers, 3))
@@ -125,6 +126,13 @@ class SimpleTargetPublisher(object):
             M = M67[i]
             txn = tx.translation_from_matrix(M)
             rxn = tx.quaternion_from_matrix(M)
+            if self._noise:
+                txn = np.random.normal(loc=txn, scale=0.01)
+                h = np.random.uniform(-0.01, 0.01)
+                ax = np.random.normal(size=3)
+                ax /= np.linalg.norm(ax)
+                d_rxn = tx.quaternion_about_axis(h, ax)
+                rxn = tx.quaternion_multiply(d_rxn, rxn)
             
             msg = AprilTagDetection()
             msg.id = [i]

@@ -82,7 +82,7 @@ class GraphSlamROS(object):
         cov = np.square([0.05, 0.05, 0.05, 0.01, 0.01, 0.01])
         cov = np.divide(1.0, cov)
         omega = np.diag(cov)
-        self._omega = omega
+        self._omega = np.eye(6)#omega
 
         self._pub_ee = rospy.Publisher('end_effector_est', PoseStamped, queue_size=10)
         self._pub_ze = rospy.Publisher('landmark_est', PoseArray, queue_size=10)
@@ -103,6 +103,7 @@ class GraphSlamROS(object):
             jorder = ['waist', 'shoulder', 'elbow', 'hand', 'wrist']
             j_idx = [joint_msg.name.index(j) for j in jorder]
             j = [joint_msg.position[i] for i in j_idx]
+            j = np.random.normal(loc=j, scale=0.005)
             j = np.concatenate( (j, [0]) ) # assume final joint is fixed
         except Exception as e:
             rospy.logerr_throttle(1.0, 'Joint Positions Failed : {} \n {}'.format(e, joint_msg))
