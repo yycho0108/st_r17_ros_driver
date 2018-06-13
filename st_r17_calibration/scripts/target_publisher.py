@@ -19,6 +19,13 @@ def fill_pose_msg(msg, txn, rxn):
     msg.orientation.z = rxn[2]
     msg.orientation.w = rxn[3]
 
+def alerp(a0, a1, w):
+    s0, c0 = np.sin(a0), np.cos(a0)
+    s1, c1 = np.sin(a1), np.cos(a1)
+    s = (1.0-w)*s0 + (w)*s1
+    c = (1.0-w)*c0 + (w)*c1
+    return np.arctan2(s, c)
+
 class SimpleTargetPublisher(object):
     def __init__(self):
         rospy.init_node('simple_target_publisher')
@@ -36,6 +43,7 @@ class SimpleTargetPublisher(object):
         self._dhs = np.float32(dhs)
         self._rate = rospy.get_param('~rate', default=50)
         self._zero = rospy.get_param('~zero', default=False)
+        self._smooth = rospy.get_param('~smooth', default=True)
         self._num_markers = rospy.get_param('~num_markers', default=1)
         self._p = rospy.get_param('~p', default=0.5) # visibility
 
@@ -54,11 +62,33 @@ class SimpleTargetPublisher(object):
 
         self._jpub = rospy.Publisher('/st_r17/joint_states', JointState, queue_size=10)
 
+        self._m_i   = 0
+        self._m_n   = 100
+        self._j_0   = None
+        self._j_1   = None
 
     def publish(self):
         now = rospy.Time.now()
 
-        jpos = np.random.uniform(low=-np.pi, high=np.pi, size=5)
+
+
+        if self._smooth:
+            # smooth change over time ...
+            if self._j_0 is None:
+                self._j_0 = np.random.uniform(low=-np.pi, high=np.pi, size=5)
+                self._j_1 = np.random.uniform(low=-np.pi, high=np.pi, size=5)
+                jpos = np.copy(self._j_0)
+            else:
+                self._m_i += 1
+                jpos = alerp(self._j_0, self._j_1, float(self._m_i) / self._m_n)
+                if self._m_i >= self._m_n:
+                    self._j_0 = np.copy(self._j_1)
+                    self._j_1 = np.random.uniform(low=-np.pi, high=np.pi, size=5)
+                    self._m_i = 0
+        else:
+            # completely random
+            jpos = np.random.uniform(low=-np.pi, high=np.pi, size=5)
+
         if self._zero:
             jpos *= 0
         txn, rxn = fk(self._dhs, np.concatenate( [jpos, [0]] ))
