@@ -79,14 +79,17 @@ class GraphSlamROS(object):
         self._dh0 = dh
         self._initialized = False
         self._slam = GraphSlam3(n_l=self._num_markers,
-                l = 10000.0 # marquardt parameter
+                l = 500.0 # marquardt parameter
                 )
 
         # default observation fisher information
         # TODO : configure, currently just a guess
-        cov = np.square([0.1, 0.1, 0.1, 0.01, 0.01, 0.01])
-        cov = np.divide(1.0, cov)
-        omega = np.diag(cov)
+
+        #cov = np.square([0.1, 0.1, 0.1, 0.01, 0.01, 0.01])
+        #cov = np.divide(1.0, cov)
+        #omega = np.diag(cov)
+        #self._omega = omega
+        omega = np.diag([1,1,1,1,1,1])
         self._omega = omega
         #self._omega = np.eye(6)
 
@@ -140,12 +143,9 @@ class GraphSlamROS(object):
                         pose = pm.pose.pose.pose
                         )
                 # TODO : compute+apply static transform?
-                ps2 = self._tfl.transformPose('stereo_optical_link', ps)
-                psp, psq = pmsg2pq(ps.pose)
-                ps2p,ps2q = pmsg2pq(ps2.pose)
-                zp, zq = ps.pose.position, ps.pose.orientation
-                zp = [zp.x, zp.y, zp.z]
-                zq = [zq.x,zq.y,zq.z,zq.w]
+                ps = self._tfl.transformPose('stereo_optical_link', ps)
+                zp, zq = pmsg2pq(ps.pose)
+
                 # testing; add noise
                 #zp = np.random.normal(zp, scale=0.01)
                 #dzq = qmath_np.rq(s=0.01)

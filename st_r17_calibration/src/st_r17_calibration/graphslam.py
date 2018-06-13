@@ -53,10 +53,21 @@ class GraphSlam3(object):
 
         zis = [] # updates list
 
+        ox = np.diag([100,100,100,50,50,50])
         # apply motion updates first
         if x is not None:
             self._nodes[1] = qmath_np.xadd_rel(self._nodes[0], x, T=False)
             zis.append(1)
+
+            #z, z0, z1 = x, 0, 1
+            #self._H[z1,z1] += self._H[z0,z0] + ox
+
+            #Aij, Bij, eij = self.add_edge(z, z0, z1)
+            #self._H[z0,z0] += Aij.T.dot(Aij)
+            #self._H[z0,z1] += Aij.T.dot(Bij)
+            #self._H[z1,z0] += Bij.T.dot(Aij)
+            #self._H[z1,z1] += Bij.T.dot(Bij)
+
             #zs.append([0, 1, x, ox])
             # TODO : incorporate omega_x somehow
             # simply adding x0->x1 to zs did not work
@@ -74,6 +85,8 @@ class GraphSlam3(object):
                         self._nodes[z0], z, T=False)
                 # no need to compute deltas for initial guesses
                 # (will be zero) 
+
+
                 continue
             Aij, Bij, eij = self.add_edge(z, z0, z1)
             self._H[z0,z0] += Aij.T.dot(o).dot(Aij)
