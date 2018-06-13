@@ -15,6 +15,11 @@ from st_r17_calibration.kinematics import fk
 from st_r17_calibration.graphslam import GraphSlam3
 from st_r17_calibration import qmath_np
 
+def pmsg2pq(msg):
+    p = msg.position
+    q = msg.orientation
+    return [p.x, p.y, p.z], [q.x,q.y,q.z,q.w]
+
 def pose(p, q):
     msg = Pose()
     msg.position.x = p[0]
@@ -74,15 +79,17 @@ class GraphSlamROS(object):
         self._dh0 = dh
         self._initialized = False
         self._slam = GraphSlam3(n_l=self._num_markers,
-                l = 10.0 # marquardt parameter
+                l = 10000.0 # marquardt parameter
                 )
 
         # default observation fisher information
         # TODO : configure, currently just a guess
-        cov = np.square([0.05, 0.05, 0.05, 0.01, 0.01, 0.01])
+        cov = np.square([0.1, 0.1, 0.1, 0.01, 0.01, 0.01])
         cov = np.divide(1.0, cov)
         omega = np.diag(cov)
-        self._omega = np.eye(6)#omega
+        self._omega = omega
+        #self._omega = np.eye(6)
+
 
         self._pub_ee = rospy.Publisher('end_effector_est', PoseStamped, queue_size=10)
         self._pub_ze = rospy.Publisher('landmark_est', PoseArray, queue_size=10)
@@ -103,7 +110,7 @@ class GraphSlamROS(object):
             jorder = ['waist', 'shoulder', 'elbow', 'hand', 'wrist']
             j_idx = [joint_msg.name.index(j) for j in jorder]
             j = [joint_msg.position[i] for i in j_idx]
-            j = np.random.normal(loc=j, scale=0.005)
+            #j = np.random.normal(loc=j, scale=0.005)
             j = np.concatenate( (j, [0]) ) # assume final joint is fixed
         except Exception as e:
             rospy.logerr_throttle(1.0, 'Joint Positions Failed : {} \n {}'.format(e, joint_msg))
@@ -132,10 +139,17 @@ class GraphSlamROS(object):
                         header = pm.pose.header,
                         pose = pm.pose.pose.pose
                         )
-                ps = self._tfl.transformPose('stereo_optical_link', ps)
+                # TODO : compute+apply static transform?
+                ps2 = self._tfl.transformPose('stereo_optical_link', ps)
+                psp, psq = pmsg2pq(ps.pose)
+                ps2p,ps2q = pmsg2pq(ps2.pose)
                 zp, zq = ps.pose.position, ps.pose.orientation
-                zp = [zp.x,zp.y,zp.z]
+                zp = [zp.x, zp.y, zp.z]
                 zq = [zq.x,zq.y,zq.z,zq.w]
+                # testing; add noise
+                #zp = np.random.normal(zp, scale=0.01)
+                #dzq = qmath_np.rq(s=0.01)
+                #zq = qmath_np.qmul(dzq, zq)
                 dz = np.concatenate([zp,zq], axis=0)
                 zi = self._m2i[m_id]
                 if zi >= self._num_markers:
