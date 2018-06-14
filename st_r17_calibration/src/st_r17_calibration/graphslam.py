@@ -79,8 +79,9 @@ class GraphSlam3(object):
                 nodes[i] = qmath.xadd_abs(nodes[i], dx[i])
 
             delta = np.mean(np.square(dx))
-            print 'delta', delta
+            #print 'delta', delta
             if delta < tol:
+                #print 'solved'
                 break
         return nodes
 
@@ -151,7 +152,7 @@ class GraphSlam3(object):
         #for i in zis:
         #    self._nodes[i] = qmath.xadd_abs(self._nodes[i], dx[i-1])
         try:
-            self._alpha *= 0.9999
+            self._alpha *= 1.0#0.9999
         except Exception:
             self._alpha = 1.0
         for i in range(1, 2+self._n_l):

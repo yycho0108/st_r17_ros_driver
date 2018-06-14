@@ -14,6 +14,8 @@ from st_r17_calibration.approx_sync import ApproximateSynchronizer
 from st_r17_calibration.kinematics import fk
 from st_r17_calibration.graphslam import GraphSlam3
 from st_r17_calibration import qmath
+from st_r17_calibration.srv import SetDH, SetDHRequest, SetDHResponse
+from st_r17_calibration.msg import DH
 
 def pmsg2pq(msg):
     p = msg.position
@@ -52,6 +54,7 @@ class GraphSlamROS(object):
         self._num_markers = rospy.get_param('~num_markers', default=4)
         self._noise = rospy.get_param('~noise', default=True)
         self._slop = rospy.get_param('~slop', default=0.01)
+        self._marquardt = rospy.get_param('~marquardt', default=0.01)
 
         self._dh = rospy.get_param('~dh', default=None)
         if self._dh is None:
@@ -81,8 +84,7 @@ class GraphSlamROS(object):
         self._zinit = False
         self._z_nodes = [[] for _ in range(self._num_markers)]
         self._slam = GraphSlam3(n_l=self._num_markers,
-                l = 100.0 # marquardt parameter
-                )
+                l=self._marquardt)
 
         # default observation fisher information
         # TODO : configure, currently just a guess
@@ -95,9 +97,10 @@ class GraphSlamROS(object):
         self._omega = omega
         #self._omega = np.eye(6)
 
-
         self._pub_ee = rospy.Publisher('end_effector_est', PoseStamped, queue_size=10)
         self._pub_ze = rospy.Publisher('landmark_est', PoseArray, queue_size=10)
+        self._gt_pub = rospy.Publisher('/base_to_target', AprilTagDetectionArray, queue_size=10)
+        self._dh_sub = rospy.Subscriber('/dh_params', DH, self.dh_cb)
 
         self._sub = ApproximateSynchronizer(slop=self._slop, fs=[
             message_filters.Subscriber('joint_states', JointState), # ~50hz, 0.02
@@ -105,6 +108,14 @@ class GraphSlamROS(object):
             ], queue_size=20)
 
         self._sub.registerCallback(self.data_cb)
+
+    def dh_cb(self, req):
+        try:
+            dh = req.data
+            dh = np.reshape(dh, [-1,4])
+        except Exception as e:
+            rospy.logerr_throttle(1.0, 'Setting DH Failed : {}'.format(dh))
+        self._dh0 = dh
 
     def data_cb(self, joint_msg, detection_msgs):
         # set info-mat param
@@ -167,53 +178,69 @@ class GraphSlamROS(object):
             return
 
         #semi-offline batch optimization
-        #self._graph.append([p, q, zs])
-        #if len(self._graph) > 200:
+        self._graph.append([p, q, zs])
+        if len(self._graph) > 200:
+            n_poses = len(self._graph)
+            nodes = []
+            edges = []
+            z_nodes = [[] for _ in range(self._num_markers)]
+            for g in self._graph:
+                xi = len(nodes) # pose index
 
-        #    if len(self._z_nodes[0]) > 0:
-        #        print 'already initialized'
-        #        zinit = True
-        #    else:
-        #        zinit = False
+                gp, gq, gz = g
+                gx = np.concatenate([gp,gq], axis=0)
+                nodes.append(gx)
+                # TODO : handle scenarios when a landmark
+                # didn't appear in 200 observations
+                for _, zi, dz, zo in gz:
+                    zi_ = n_poses + (zi-2) # re-computed landmark index
+                    edges.append([xi,zi_,dz,zo])
+                    # compute absolute position to start from good-ish mean
+                    #if not self._zinit:
+                    zp_a, zq_a = qmath.x2pq(qmath.xadd_rel(gx, dz, T=False))
+                    z_nodes[zi-2].append([zp_a, zq_a])
+            #if self._zinit:
+            #    # use the previous initialization for landmarks
+            #    for zp, zq in self._z_nodes:
+            #        zx = np.concatenate([zp,zq], axis=0)
+            #        nodes.append(zx)
+            #else:
+            # initialize landmarks with average over 200 samples
+            for zi, zn in enumerate(z_nodes):
+                zp, zq = zip(*zn)
+                zp   = np.mean(zp, axis=0)
+                zq   = qmath.qmean(zq)
+                zx   = np.concatenate([zp,zq], axis=0)
+                nodes.append(zx)
+            self._zinit = True
+            #print "PRE:"
+            #print nodes[-self._num_markers:]
+            nodes = self._slam.optimize(nodes, edges, n_iter=100, tol=1e-6)
+            #print "POST:"
+            #print nodes[-self._num_markers:]
 
-        #    n_poses = len(self._graph)
-        #    nodes = []
-        #    edges = []
+            self._z_nodes = [qmath.x2pq(x) for x in nodes[-self._num_markers:]]
+            lms = nodes[-self._num_markers:]
+            lms = [qmath.x2pq(x) for x in lms]
+            self._pub_ze.publish(msgn(lms,rospy.Time.now())) 
+            self._graph.clear()
 
-        #    for g in self._graph:
-        #        xi = len(nodes) # pose index
+            stamp = rospy.Time.now()
+            g_msg = AprilTagDetectionArray()
+            g_msg.header.stamp = stamp
+            g_msg.header.frame_id = 'base_link'
 
-        #        gp, gq, gz = g
-        #        gx = np.concatenate([gp,gq], axis=0)
-        #        nodes.append(gx)
-        #        # TODO : handle scenarios when a landmark
-        #        # didn't appear in 200 observations
-        #        for _, zi, dz, zo in gz:
-        #            zi_ = n_poses + (zi-2) # re-computed landmark index
-        #            edges.append([xi,zi,dz,zo])
-        #            # compute absolute position to start from good-ish mean
-        #            if not zinit:
-        #                zp_a, zq_a = qmath.x2pq(qmath.xadd_rel(gx, dz, T=False))
-        #                self._z_nodes[zi-2].append([zp_a, zq_a])
-        #    if zinit:
-        #        for zp, zq in self._z_nodes:
-        #            zx = np.concatenate([zp,zq], axis=0)
-        #            nodes.append(zx)
-        #    else:
-        #        for zi, zn in enumerate(self._z_nodes):
-        #            zp, zq = zip(*zn)
-        #            zp   = np.mean(zp, axis=0)
-        #            zq   = qmath.qmean(zq)
-        #            zx   = np.concatenate([zp,zq], axis=0)
-        #            nodes.append(zx)
-
-        #    nodes = self._slam.optimize(nodes, edges, n_iter=100, tol=1e-6)
-        #    self._z_nodes = [qmath.x2pq(x) for x in nodes[-self._num_markers:]]
-        #    lms = nodes[-self._num_markers:]
-        #    lms = [qmath.x2pq(x) for x in lms]
-        #    self._pub_ze.publish(msgn(lms,rospy.Time.now())) 
-        #    #print nodes[-self._num_markers:]
-        #    self._graph.clear()
+            for i in range(self._num_markers):
+                msg = AprilTagDetection()
+                m_id = self._i2m[i]
+                msg.id = [m_id]
+                msg.size = [0.0] # not really a thing
+                msg.pose.pose.pose = pose(lms[i][0], lms[i][1])
+                msg.pose.header.frame_id = 'base_link'
+                msg.pose.header.stamp = stamp
+                g_msg.detections.append(msg)
+            self._gt_pub.publish(g_msg)
+        return
         ### END: semi-offline batch optimization
 
         # online slam with "reasonable" initialization?

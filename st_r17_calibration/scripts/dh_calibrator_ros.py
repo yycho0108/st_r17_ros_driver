@@ -17,6 +17,7 @@ from apriltags2_ros.msg import AprilTagDetectionArray, AprilTagDetection
 
 from st_r17_calibration.approx_sync import ApproximateSynchronizer
 from st_r17_calibration.dh_calibrator import DHCalibrator
+from st_r17_calibration.msg import DH
 
 def fill_pose_msg(msg, txn, rxn):
     msg.position.x = txn[0]
@@ -47,13 +48,13 @@ class DHCalibratorROS(object):
 
         self._dh = np.float32(self._dh)
         self._num_markers = rospy.get_param('~num_markers', default=1)
-        self._noise = rospy.get_param('~noise', default=True)
+        self._noise = rospy.get_param('~noise', default=3.0)
         self._slop = rospy.get_param('~slop', default=0.01)
         self._lr = float(rospy.get_param('~lr', default=5e-2))
 
-        if self._noise:
-
-            sc = np.float32([np.deg2rad(3.0), 0.03, 0.03, np.deg2rad(3.0)])
+        if self._noise > 0.0:
+            z = np.float32([np.deg2rad(1.0), 0.01, 0.01, np.deg2rad(1.0)])
+            sc = self._noise * z
 
             # for testing with virtual markers, etc.
             z = np.random.normal(
@@ -69,6 +70,7 @@ class DHCalibratorROS(object):
 
         # initial DH parameter
         self._dh0 = dh 
+
         self._dhf = None
 
         self._calib = DHCalibrator(dh, m=self._num_markers, lr=self._lr)
@@ -86,6 +88,7 @@ class DHCalibratorROS(object):
         self._sub.registerCallback(self.data_cb)
         self._pub = rospy.Publisher('dh', AprilTagDetectionArray, queue_size=10)
         self._vpub = rospy.Publisher('dh_viz', PoseArray, queue_size=10)
+        self._dhpub = rospy.Publisher('/dh_params', DH, queue_size=10)
         self._m2i = defaultdict(lambda : len(self._m2i))
         self._i2m = {}
         self._seen = [False for _ in range(self._num_markers)]
@@ -220,6 +223,7 @@ class DHCalibratorROS(object):
         # save data ...
         self._errs.append(real_err)
         self._dhf = dhs
+        self._dhpub.publish(DH(data=np.ravel(dhs).astype(np.float32)))
 
     def save(self):
         try:

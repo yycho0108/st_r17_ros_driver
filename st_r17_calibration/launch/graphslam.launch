@@ -9,6 +9,7 @@
         <param name="num_markers" value="$(arg num_markers)"/>
         <param name="noise" value="$(arg noise)"/> <!-- useful for testing in sim -->
         <param name="slop" value="$(arg slop)"/>
+		<param name="marquardt" value="0.01"/>
         <rosparam command="load" file="$(find st_r17_calibration)/config/dh.yaml"/>
         <!--<remap from="stereo_to_target" to="/tag_detections"/>-->
         <remap from="joint_states" to="/st_r17/joint_states"/>

@@ -45,7 +45,8 @@ class SimpleTargetPublisher(object):
         self._zero = rospy.get_param('~zero', default=False)
         self._smooth = rospy.get_param('~smooth', default=True)
         self._num_markers = rospy.get_param('~num_markers', default=1)
-        self._noise = rospy.get_param('~noise', default=False)
+        self._noise = rospy.get_param('~noise', default=0.0)
+        self._ground_truth = rospy.get_param('~ground_truth', default=True) # flag : publish ground truth
         self._p = rospy.get_param('~p', default=0.5) # visibility
 
         xyz = np.random.uniform(low = -1.0, high = 1.0, size=(self._num_markers, 3))
@@ -58,7 +59,8 @@ class SimpleTargetPublisher(object):
         self._ppub = rospy.Publisher('/stereo_to_target', AprilTagDetectionArray, queue_size=10)
         self._pvpub = rospy.Publisher('/target_pose_viz', PoseArray, queue_size=10)
 
-        self._gpub = rospy.Publisher('/base_to_target', AprilTagDetectionArray, queue_size=10)
+        if self._ground_truth:
+            self._gpub = rospy.Publisher('/base_to_target', AprilTagDetectionArray, queue_size=10)
         self._gvpub = rospy.Publisher('/ground_truth_viz', PoseArray, queue_size=10)
 
         self._jpub = rospy.Publisher('/st_r17/joint_states', JointState, queue_size=10)
@@ -126,9 +128,9 @@ class SimpleTargetPublisher(object):
             M = M67[i]
             txn = tx.translation_from_matrix(M)
             rxn = tx.quaternion_from_matrix(M)
-            if self._noise:
-                txn = np.random.normal(loc=txn, scale=0.05)
-                h = np.random.uniform(-0.05, 0.05)
+            if self._noise > 0.0:
+                txn = np.random.normal(loc=txn, scale=self._noise)
+                h = np.random.uniform(-self._noise, self._noise)
                 ax = np.random.normal(size=3)
                 ax /= np.linalg.norm(ax)
                 d_rxn = tx.quaternion_about_axis(h, ax)
@@ -174,7 +176,10 @@ class SimpleTargetPublisher(object):
             g_msg.detections.append(msg)
             gv_msg.poses.append(pwcs.pose.pose)
 
-        self._gpub.publish(g_msg)
+        if self._ground_truth:
+            self._gpub.publish(g_msg)
+            
+        # visualizations are always published
         self._gvpub.publish(gv_msg)
 
         #gmsg = PoseStamped()
