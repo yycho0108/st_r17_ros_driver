@@ -75,11 +75,11 @@ class GraphSlamROS(object):
             
         self._m2i = defaultdict(lambda : len(self._m2i))
         self._i2m = {}
-
         self._dh0 = dh
         self._initialized = False
+        self._graph = deque(maxlen=1000)
         self._slam = GraphSlam3(n_l=self._num_markers,
-                l = 500.0 # marquardt parameter
+                l = 10.0 # marquardt parameter
                 )
 
         # default observation fisher information
@@ -106,8 +106,6 @@ class GraphSlamROS(object):
 
     def data_cb(self, joint_msg, detection_msgs):
         # set info-mat param
-
-
         # reorder joint information
         try:
             jorder = ['waist', 'shoulder', 'elbow', 'hand', 'wrist']
@@ -124,6 +122,12 @@ class GraphSlamROS(object):
 
         # form pose ...
         p, q = fk(self._dh0, j)
+        p_gt, q_gt = fk(self._dh, j)
+
+        # testing ; add motion noise
+        # p = np.random.normal(p, scale=0.01)
+        # dq = qmath_np.rq(s=0.01)
+        # q = qmath_np.qmul(dq, q)
 
         if not self._initialized:
             # save previous pose and don't proceed
@@ -147,9 +151,10 @@ class GraphSlamROS(object):
                 zp, zq = pmsg2pq(ps.pose)
 
                 # testing; add noise
-                #zp = np.random.normal(zp, scale=0.01)
-                #dzq = qmath_np.rq(s=0.01)
-                #zq = qmath_np.qmul(dzq, zq)
+                # zp = np.random.normal(zp, scale=0.01)
+                # dzq = qmath_np.rq(s=0.01)
+                # zq = qmath_np.qmul(dzq, zq)
+
                 dz = np.concatenate([zp,zq], axis=0)
                 zi = self._m2i[m_id]
                 if zi >= self._num_markers:
@@ -160,19 +165,76 @@ class GraphSlamROS(object):
             rospy.logerr_throttle(1.0, 'TF Failed : {}'.format(e))
             return
 
+        #semi-offline batch optimization
+        #self._graph.append([p, q, zs])
+        #if len(self._graph) > 200:
+        #    n_poses = len(self._graph)
+        #    nodes = []
+        #    edges = []
+        #    z_nodes = [[] for _ in range(self._num_markers)]
+
+        #    for g in self._graph:
+        #        xi = len(nodes) # pose index
+
+        #        gp, gq, gz = g
+        #        gx = np.concatenate([gp,gq], axis=0)
+        #        nodes.append(gx)
+        #        # TODO : handle scenarios when a landmark
+        #        # didn't appear in 200 observations
+        #        for _, zi, dz, zo in gz:
+        #            zi_ = n_poses + (zi-2) # re-computed landmark index
+        #            edges.append([xi,zi,dz,zo])
+        #            # compute absolute position to start from good-ish mean
+        #            zp_a, zq_a = qmath_np.x2pq(qmath_np.xadd_rel(gx, dz, T=False))
+        #            z_nodes[zi-2].append([zp_a, zq_a])
+
+        #    for zi, zn in enumerate(z_nodes):
+        #        zp, zq = zip(*zn)
+        #        zp   = np.mean(zp, axis=0)
+        #        zq   = qmath_np.qmean(zq)
+        #        zx   = np.concatenate([zp,zq], axis=0)
+        #        nodes.append(zx)
+
+        #    self._slam.optimize(nodes, edges, n_iter=100)
+        #    lms = nodes[-self._num_markers:]
+        #    lms = [qmath_np.x2pq(x) for x in lms]
+        #    self._pub_ze.publish(msgn(lms,rospy.Time.now())) 
+        #    #print nodes[-self._num_markers:]
+        #    self._graph.clear()
+
         dp, dq = qmath_np.xrel(self._p, self._q, p, q)
         dx     = np.concatenate([dp,dq], axis=0)
 
         # save p-q
-        self._p = p
-        self._q = q
+        #self._p = p
+        #self._q = q
 
         # form dz ...
         mu = self._slam.step(x=dx, zs=zs)
         mu = np.reshape(mu, [-1, 7])
         ep, eq = qmath_np.x2pq(mu[1])
+        gtp, gtq = fk(self._dh, j)
+
+        perr = np.subtract(ep,  gtp)
+        perr = np.linalg.norm(perr)
+        qerr = qmath_np.T(qmath_np.qmul(qmath_np.qinv(gtq), eq))
+        qerr = ((qerr + np.pi) % (2*np.pi)) - np.pi
+        qerr = np.linalg.norm(qerr)
+        epe, eqe = perr, qerr
+
+        perr = np.subtract(p,  gtp)
+        perr = np.linalg.norm(perr)
+        qerr = qmath_np.T(qmath_np.qmul(qmath_np.qinv(gtq), q))
+        qerr = ((qerr + np.pi) % (2*np.pi)) - np.pi
+        qerr = np.linalg.norm(qerr)
+        pe, qe = perr, qerr
+        #print pe-epe, qe-eqe
+
         ez     = [qmath_np.x2pq(e) for e in mu[2:]]
         #ez     = [unparametrize(e) for e in mu[1:]]
+
+        self._p, self._q = ep.copy(), eq.copy()
+        #self._p, self._q = p, q
 
         t = joint_msg.header.stamp
         self._pub_ee.publish(msg1(ep, eq, t))

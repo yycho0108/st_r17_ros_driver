@@ -9,6 +9,12 @@ def qinv(q):
     qx,qy,qz,qw = q
     return np.asarray([-qx,-qy,-qz,qw], dtype=np.float64)
 
+def qmean(qs):
+    Q = np.stack(qs, axis=-1) #4xN
+    w, v = np.linalg.eig(Q.dot(Q.T))
+    q = v[:, 0]
+    return q / np.linalg.norm(q)
+
 def qmul(q1, q0):
     return ql2Q(q1).dot(q0)
     #return tx.quaternion_multiply(q1,q0)
@@ -127,6 +133,7 @@ def xadd_rel(x, dx, T=True):
     dq = Tinv(dq) if T else dq
     p_n = p + qxv(q, dp)
     q_n = qmul(q, dq)
+    q_n /= np.linalg.norm(q_n)
     return pq2x(p_n, q_n)
 
 def xadd_abs(x, dx, T=True):
@@ -134,6 +141,7 @@ def xadd_abs(x, dx, T=True):
     p, q = x2pq(x)
     dp, dq = x2pq(dx)
     dq = Tinv(dq) if T else dq
+    dq /= np.linalg.norm(dq)
     p_n = p + dp
     q_n = qmul(dq, q)
     return pq2x(p_n, q_n)

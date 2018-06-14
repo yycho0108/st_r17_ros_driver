@@ -64,7 +64,7 @@ class SimpleTargetPublisher(object):
         self._jpub = rospy.Publisher('/st_r17/joint_states', JointState, queue_size=10)
 
         self._m_i   = 0
-        self._m_n   = 100
+        self._m_n   = 400
         self._j_0   = None
         self._j_1   = None
 

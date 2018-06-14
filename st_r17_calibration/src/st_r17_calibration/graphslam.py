@@ -24,8 +24,12 @@ class GraphSlam3(object):
         self._n_l = n_l
         self._lambda = l
 
-    def add_edge(self, x, i0, i1):
-        n = self._nodes
+    def add_edge(self, x, i0, i1, nodes=None):
+        if nodes is None:
+            n = self._nodes
+        else:
+            n = nodes
+
         p0, q0 = qmath_np.x2pq(n[i0])
         p1, q1 = qmath_np.x2pq(n[i1])
         dp, dq = qmath_np.x2pq(x)
@@ -38,10 +42,46 @@ class GraphSlam3(object):
         self._b = np.zeros((n,1,6,1), dtype=np.float64)
         self._H[0,0] = np.eye(6)
         self._nodes[0] = x0
+        x,q = qmath_np.x2pq(x0)
+
+        #print 'x', x
+        #print 'q', q, np.linalg.norm(q)
+        #raise "Stop"
+
         # TODO : Are the below initializations necessary?
         #p, q = qmath_np.x2pq(x0)
         #x = np.concatenate([p,qmath_np.T(q)], axis=-1)
         #self._b[0,0,:,0] = x
+
+    def optimize(self, nodes, edges, n_iter=10, tol=1e-4):
+        n = len(nodes)
+        for it in range(n_iter):
+            H = np.zeros((n,n,6,6), dtype=np.float64)
+            b = np.zeros((n,1,6,1), dtype=np.float64)
+            for z0, z1, z, o in edges:
+                Aij,Bij,eij = self.add_edge(z, z0, z1, nodes)
+                H[z0,z0] += Aij.T.dot(o).dot(Aij)
+                H[z0,z1] += Aij.T.dot(o).dot(Bij)
+                H[z1,z0] += Bij.T.dot(o).dot(Aij)
+                H[z1,z1] += Bij.T.dot(o).dot(Bij)
+                b[z0]   += Aij.T.dot(o).dot(eij)
+                b[z1]   += Bij.T.dot(o).dot(eij)
+
+            H = block(H)
+            b = block(b)
+
+            mI = self._lambda * np.eye(*H.shape) # marquardt damping
+            dx = np.linalg.lstsq(H+mI,-b, rcond=None)[0]
+            dx = np.reshape(dx, [-1,6]) # [x1, l0, ... ln]
+
+            for i in range(n):
+                nodes[i] = qmath_np.xadd_abs(nodes[i], dx[i])
+
+            delta = np.mean(np.square(dx))
+            print 'delta', delta
+            if delta < tol:
+                break
+
 
     def step(self, x=None, zs=None):
         """ Online Version """
@@ -53,24 +93,11 @@ class GraphSlam3(object):
 
         zis = [] # updates list
 
-        ox = np.diag([100,100,100,50,50,50])
+        ox = np.diag([1,1,1,1,1,1])
         # apply motion updates first
         if x is not None:
             self._nodes[1] = qmath_np.xadd_rel(self._nodes[0], x, T=False)
-            zis.append(1)
-
-            #z, z0, z1 = x, 0, 1
-            #self._H[z1,z1] += self._H[z0,z0] + ox
-
-            #Aij, Bij, eij = self.add_edge(z, z0, z1)
-            #self._H[z0,z0] += Aij.T.dot(Aij)
-            #self._H[z0,z1] += Aij.T.dot(Bij)
-            #self._H[z1,z0] += Bij.T.dot(Aij)
-            #self._H[z1,z1] += Bij.T.dot(Bij)
-
-            #zs.append([0, 1, x, ox])
-            # TODO : incorporate omega_x somehow
-            # simply adding x0->x1 to zs did not work
+            zs = zs + [[0, 1, x, ox]]
 
         # H and b are organized as (X0, X1, L0, L1, ...)
         # where X0 is the previous position, and X1 is the current position.
@@ -85,8 +112,6 @@ class GraphSlam3(object):
                         self._nodes[z0], z, T=False)
                 # no need to compute deltas for initial guesses
                 # (will be zero) 
-
-
                 continue
             Aij, Bij, eij = self.add_edge(z, z0, z1)
             self._H[z0,z0] += Aij.T.dot(o).dot(Aij)
@@ -115,14 +140,15 @@ class GraphSlam3(object):
         #dx = np.matmul(np.linalg.pinv(H), -B)
         dx = np.linalg.lstsq(H+mI,-B, rcond=None)[0]
         dx = np.reshape(dx, [-1,6]) # [x1, l0, ... ln]
-        print np.sum(np.abs(dx))
+        delta = np.sum(np.abs(dx))
 
-        for i in zis:
-            self._nodes[i] = qmath_np.xadd_abs(self._nodes[i], dx[i-1])
+        #if delta < 1.0:
+        #for i in zis:
+        #    self._nodes[i] = qmath_np.xadd_abs(self._nodes[i], dx[i-1])
 
-        #for i in range(1, 2+self._n_l):
-        #    if i in self._nodes:
-        #        self._nodes[i] = qmath_np.xadd(self._nodes[i], dx[i-1])
+        for i in range(1, 2+self._n_l):
+            if i in self._nodes:
+                self._nodes[i] = qmath_np.xadd_abs(self._nodes[i], dx[i-1])
 
         # replace previous node with current position
         self._nodes[0] = self._nodes[1].copy()
