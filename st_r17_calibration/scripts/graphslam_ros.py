@@ -159,7 +159,7 @@ class GraphSlamROS(object):
                         pose = pm.pose.pose.pose
                         )
                 # TODO : compute+apply static transform?
-                #ps = self._tfl.transformPose('stereo_optical_link', ps)
+                ps = self._tfl.transformPose('stereo_optical_link', ps)
                 zp, zq = pmsg2pq(ps.pose)
 
                 # testing; add observation noise
@@ -177,7 +177,7 @@ class GraphSlamROS(object):
             rospy.logerr_throttle(1.0, 'TF Failed : {}'.format(e))
             return
 
-        #semi-offline batch optimization
+        ### semi-offline batch optimization
         self._graph.append([p, q, zs])
         if len(self._graph) > 200:
             n_poses = len(self._graph)
@@ -243,34 +243,33 @@ class GraphSlamROS(object):
         return
         ### END: semi-offline batch optimization
 
-        # online slam with "reasonable" initialization?
-        # if not self._zinit:
-        #     # add entry ...
-        #     gx = np.concatenate([p,q], axis=0)
-        #     for z in zs:
-        #         _, zi, dz, _ = z
-        #         zi = zi - 2
-        #         zp_a, zq_a = qmath.x2pq(qmath.xadd_rel(gx, dz, T=False))
-        #         self._z_nodes[zi].append( (zp_a, zq_a) )
+        ### online slam with "reasonable" initialization?
+        #if not self._zinit:
+        #    # add entry ...
+        #    gx = np.concatenate([p,q], axis=0)
+        #    for z in zs:
+        #        _, zi, dz, _ = z
+        #        zi = zi - 2
+        #        zp_a, zq_a = qmath.x2pq(qmath.xadd_rel(gx, dz, T=False))
+        #        self._z_nodes[zi].append( (zp_a, zq_a) )
 
-        #     # check entries ...
-        #     ls = [len(e) for e in self._z_nodes]
-        #     if np.all(np.greater_equal(ls, 100)):
-        #         znodes = []
-        #         for zi, zn in enumerate(self._z_nodes):
-        #             zp, zq = zip(*zn)
-        #             zp   = np.mean(zp, axis=0)
-        #             zq   = qmath.qmean(zq)
-        #             print 'zp', zp
-        #             print 'zq', zq
-        #             zx   = np.concatenate([zp,zq], axis=0)
-        #             znodes.append(zx)
-        #             self._slam._nodes[2+zi] = zx
-        #             self._slam.initialize(gx)
-        #             self._p = p
-        #             self._q = q
-        #         self._zinit = True
-        #     return
+        #    # check entries ...
+        #    ls = [len(e) for e in self._z_nodes]
+        #    if np.all(np.greater_equal(ls, 100)):
+        #        znodes = []
+        #        for zi, zn in enumerate(self._z_nodes):
+        #            zp, zq = zip(*zn)
+        #            zp   = np.mean(zp, axis=0)
+        #            zq   = qmath.qmean(zq)
+        #            zx   = np.concatenate([zp,zq], axis=0)
+        #            znodes.append(zx)
+        #            self._slam._nodes[2+zi] = zx
+        #            self._slam.initialize(gx)
+        #            self._p = p
+        #            self._q = q
+        #        self._zinit = True
+        #    return
+        ### END : online slam with reasonable initialization
 
         dp, dq = qmath.xrel(self._p, self._q, p, q)
         dx     = np.concatenate([dp,dq], axis=0)
@@ -305,6 +304,23 @@ class GraphSlamROS(object):
         #print pe-epe, qe-eqe
 
         ez     = [qmath.x2pq(e) for e in mu[2:]]
+
+        stamp = rospy.Time.now()
+        g_msg = AprilTagDetectionArray()
+        g_msg.header.stamp = stamp
+        g_msg.header.frame_id = 'base_link'
+
+        for i in range(self._num_markers):
+            msg = AprilTagDetection()
+            m_id = self._i2m[i]
+            msg.id = [m_id]
+            msg.size = [0.0] # not really a thing
+            msg.pose.pose.pose = pose(ez[i][0], ez[i][1])
+            msg.pose.header.frame_id = 'base_link'
+            msg.pose.header.stamp = stamp
+            g_msg.detections.append(msg)
+        self._gt_pub.publish(g_msg)
+
         #ez     = [unparametrize(e) for e in mu[1:]]
 
         self._p, self._q = ep.copy(), eq.copy()

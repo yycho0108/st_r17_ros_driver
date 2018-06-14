@@ -146,7 +146,7 @@ class GraphSlam3(object):
         dx = np.linalg.lstsq(H+mI,-B, rcond=None)[0]
         dx = np.reshape(dx, [-1,6]) # [x1, l0, ... ln]
         delta = np.sum(np.abs(dx))
-        print 'delta', delta
+        #print 'delta', delta
 
         #if delta < 1.0:
         #for i in zis:
