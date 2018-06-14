@@ -16,8 +16,8 @@ def qmean(qs):
     return q / np.linalg.norm(q)
 
 def qmul(q1, q0):
+    # TODO : more efficient ways??
     return ql2Q(q1).dot(q0)
-    #return tx.quaternion_multiply(q1,q0)
 
 def axh2q(ax,h):
     v = np.sin(h/2.) * ax
@@ -99,7 +99,7 @@ else:
         return q
     
     def dTdX(x):
-        x = x / np.linalg.norm(x)
+        #x = x / np.linalg.norm(x)
         qx,qy,qz,qw = x
     
         #qw = np.clip(qw, -1.0, 1.0)

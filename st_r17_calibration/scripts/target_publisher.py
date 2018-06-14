@@ -64,7 +64,7 @@ class SimpleTargetPublisher(object):
         self._jpub = rospy.Publisher('/st_r17/joint_states', JointState, queue_size=10)
 
         self._m_i   = 0
-        self._m_n   = 400
+        self._m_n   = 100
         self._j_0   = None
         self._j_1   = None
 
@@ -127,8 +127,8 @@ class SimpleTargetPublisher(object):
             txn = tx.translation_from_matrix(M)
             rxn = tx.quaternion_from_matrix(M)
             if self._noise:
-                txn = np.random.normal(loc=txn, scale=0.01)
-                h = np.random.uniform(-0.01, 0.01)
+                txn = np.random.normal(loc=txn, scale=0.05)
+                h = np.random.uniform(-0.05, 0.05)
                 ax = np.random.normal(size=3)
                 ax /= np.linalg.norm(ax)
                 d_rxn = tx.quaternion_about_axis(h, ax)
