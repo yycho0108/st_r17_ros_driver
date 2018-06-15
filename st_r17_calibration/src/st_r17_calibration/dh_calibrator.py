@@ -57,6 +57,8 @@ def qmul(qa, qb):
     q = q / tf.norm(q, keepdims=True)
     return q
 
+qxq=qmul # alias
+
 def qlog(q):
     """ assume unit quaternion """
     va, ra = tf.split(q, [3,1], axis=-1)

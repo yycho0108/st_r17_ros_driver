@@ -117,6 +117,7 @@ def dedDH(dhs, qs, t0n, q0n):
     Ts = [dh2T(dh,q) for (dh,q) in zip(dhs,qs)]
     Rs = [T[:3,:3] for T in Ts]
     ts = [T[:3,3]  for T in Ts]
+    rtree = RTree(Rs)
 
     # compute prediction
     Tf = dot(*Ts)
@@ -127,10 +128,8 @@ def dedDH(dhs, qs, t0n, q0n):
     t_err = t - t0n
     q_err = qmath.qmul(qmath.qinv(q0n), q)
 
-    rtree = RTree(Rs)
-    
     dtdx = qmath.dTdX(q_err)
-    Q0n  = qmath.ql2Q(q0n)
+    Q0n  = qmath.ql2Q(qmath.qinv(q0n))
 
     res = []
     for (i,dh) in enumerate(dhs):
@@ -140,29 +139,31 @@ def dedDH(dhs, qs, t0n, q0n):
         R_pre = rtree[0,i]
         deddh_i[:3,:] = R_pre.dot(dtddh)
 
-        #dts = np.zeros(shape=(1,3), dtype=np.float64)
+        dts = np.zeros(shape=(1,3), dtype=np.float64)
         #lhs = np.zeros(shape=(3,1,3,3), dtype=np.float64)
-        #for j in range(i+1, n):
-        #    R_post = rtree[i+1,j]
-        #    lhs += testDelta(R_pre, R_post, ts[j])
-        #    dts += R_post.dot(ts[j]).T
+        for j in range(i+1, n):
+            R_post = rtree[i+1,j]
+            #lhs += testDelta(R_pre, R_post, ts[j])
+            dts += R_post.dot(ts[j]).T
         #lhs = np.squeeze(lhs,axis=1)
-        #R_pre_s = np.reshape(R_pre, [3,1,3])
-        #dts = np.reshape(dts, [1,3,1])
-        # TODO : check if correct
+        R_pre_s = np.reshape(R_pre, [1,3,3])
+        dts = np.reshape(dts, [3,1,1])
+        lhs = R_pre_s * dts
+
+        # TODO : check if correct (most likely needs overhaul)
         #deddh_i[:3,:] += np.einsum('abc,abd->cd', lhs, drddh)
         #deddh_i[:3,:] += np.einsum('abc,acd->bd', lhs, drddh)
         #deddh_i[:3,:] += np.einsum('abc,bad->cd', lhs, drddh)
-        #deddh_i[:3,:] += np.einsum('abc,bcd->ad', lhs, drddh)
+        deddh_i[:3,:] += np.einsum('abc,bcd->ad', lhs, drddh)
         #deddh_i[:3,:] += np.einsum('abc,cad->bd', lhs, drddh)
         #deddh_i[:3,:] += np.einsum('abc,cbd->ad', lhs, drddh)
         q_pre  = qmath.R2q(rtree[0,i])
         q_post = qmath.R2q(rtree[i+1,n])
-        #deddh_i[3:,:] = dot(dtdx, Q0n,
-        #        qmath.ql2Q(q_pre), # 0 ~ i-1
-        #        qmath.qr2Q(q_post), # i+1 ~ n
-        #        dqdDH(dh)
-        #        )
+        deddh_i[3:,:] = dot(dtdx, Q0n,
+                qmath.qr2Q(q_post), # i+1 ~ n
+                qmath.ql2Q(q_pre), # 0 ~ i-1
+                dqdDH(dh)
+                )
         #== d(err)/d(dh_i)
         res.append(deddh_i)
     res = np.stack(res, axis=0) # [N_JNT, N_ERR, N_DHP]
@@ -173,7 +174,10 @@ def get_delta(dh0, dh1):
     # normalize + print error
     delta[:,0] = (delta[:,0] + np.pi) % (2*np.pi) - np.pi
     delta[:,3] = (delta[:,3] + np.pi) % (2*np.pi) - np.pi
-    return np.sum(np.square(delta))
+    ad = np.mean(np.square(delta[:,(0,3)]))
+    ld = np.mean(np.square(delta[:,(1,2)]))
+    return ad, ld
+
 
 class DHCalibratorNLLS(object):
     """ Nonlinear Least-Squares DH Calibration """
@@ -182,9 +186,10 @@ class DHCalibratorNLLS(object):
 
 def main():
     N_EPOCH = 200
-    N_STEPS = 1
+    N_STEPS = 100
 
-    #np.random.seed(0)
+    #np.random.seed(5)
+
     dhs = [[3.141592653589793, 0.0, -0.355, 0.0],
           [1.5707963267948966, 0.0, 0.0, -1.5707963267948966],
           [0.0, 0.375, 0.0, 0.0],
@@ -197,17 +202,24 @@ def main():
     print dhs
     print '============'
 
-    dh0 = np.random.normal(loc=dhs, scale=0.01)
+    dh0 = np.random.normal(loc=dhs, scale=[0.01, 0.02, 0.02, 0.01])
+    dhf = np.copy(dh0)
     print 'initial'
-    print dh0
+    print dhf
     print '---'
-    print get_delta(dhs, dh0)
+    print get_delta(dhs, dhf)
     print '======='
 
+    alpha = 0.01
+    delta = 1000.0
+
+    errs = []
+
     for _ in range(N_EPOCH):
-        ddh = np.zeros_like(dh0)
+        ddh = np.zeros_like(dhf)
+        ddhs = []
         for _ in range(N_STEPS):
-            #print get_delta,dhs, dh0)
+            #print get_delta,dhs, dhf)
             # joint values
             qs = np.random.uniform(-np.pi, np.pi, size=6)
 
@@ -218,35 +230,69 @@ def main():
             q0n = qmath.R2q(Tf[:3,:3])
 
             # noisy measurements
-            dt = qmath.rt(0.0)
-            dq = qmath.rq(0.0)
+            dt = qmath.rt(0.01)
+            dq = qmath.rq(0.01)
             t0n_z = t0n + dt
             q0n_z = qmath.qmul(dq,q0n)
-            qs_z  = np.random.normal(loc=qs, scale=0.0)
+            qs_z  = np.random.normal(loc=qs, scale=0.03)
 
             # compute prediction
-            t_err, q_err, deddh = dedDH(dh0, qs_z, t0n_z, q0n_z)
+            t_err, q_err, deddh = dedDH(dhf, qs_z, t0n_z, q0n_z)
             err = np.concatenate([t_err, qmath.T(q_err)], axis=0)
+            err = np.expand_dims(err, axis=-1)
             #err   = [N_ERR]
 
             # ORDER of deddh = [N_JNT, N_ERR, N_DHP]
             deddh = np.swapaxes(deddh, 1, 0) #reorder: [N_ERR, N_JNT, N_DHP]
-            deddh = np.reshape(deddh, [-1, np.size(dh0)]) # [N_ERR, N_JNT*N_DHP]
-            ddh  += np.reshape(
-                    np.linalg.lstsq(deddh, -err, rcond=None)[0],
-                    dh0.shape)
-        dh0 = dh0 + np.reshape(ddh / N_STEPS, dh0.shape)
-        dh0[:,0] = (dh0[:,0] + np.pi) % (2*np.pi) - np.pi
-        dh0[:,3] = (dh0[:,3] + np.pi) % (2*np.pi) - np.pi
-        print get_delta(dhs, dh0)
+            deddh = np.reshape(deddh, [-1, np.size(dhf)]) # [N_ERR, N_JNT*N_DHP]
+
+            dddh = np.reshape(
+                    np.linalg.lstsq(deddh, -err, rcond=-1)[0],
+                    dhf.shape)
+            ddhs.append(dddh)
+
+            ddh += dddh
+
+            #J = deddh
+            #dddh = np.linalg.pinv(J.T.dot(J)).dot(J.T).dot(-err)
+            #dddh = np.reshape(dddh, np.shape(dhf)[::-1])
+            #dddh = np.swapaxes(dddh, 0, 1)
+            #ddh += np.reshape(dddh, np.shape(dhf)) #np.linalg.inv(J.T.dot(J)).dot(J.T).dot(-err)
+
+            #print 'J', J
+            #a = np.linalg.inv(dot(J.T,J)+0.0*np.eye(24,24))
+            #d = (J.T).dot(-err)
+            #ddh += np.reshape(a.dot(d), dhf.shape)
+            #ddh += np.linalg.pinv(J.T.dot(J) + np.eye(6,6)).dot(J).T.dot(-err)
+        #print 'mx', np.max(dddh, axis=0)
+        #print 'mn', np.min(dddh, axis=0)
+        dhf = dhf + alpha * np.reshape(ddh / N_STEPS, dhf.shape)
+        dhf[:,0] = (dhf[:,0] + np.pi) % (2*np.pi) - np.pi
+        dhf[:,3] = (dhf[:,3] + np.pi) % (2*np.pi) - np.pi
+        delta_a, delta_l = get_delta(dhs, dhf)
+        delta_n = delta_a + delta_l
+        errs.append(delta_n)
+        if delta_n > delta:
+            alpha *= 0.9
+        else:
+            alpha *= 1.05
+        delta = delta_n
+
+        print 'current (alpha,delta) : {}, {}'.format(alpha, delta)
 
     #dh0 = dh0 + np.reshape(ddh / 1000.0, dh0.shape)
 
     print 'final'
     print dh0
     print '---'
-    print get_delta(dhs, dh0)
+    print get_delta(dhs, dhf)
     print '====='
+
+    np.savetxt('/tmp/err.csv', errs)
+    np.savetxt('/tmp/dh0.csv', dh0) # initial DH
+    np.savetxt('/tmp/dhn.csv', dhs)  # nominal DH
+    np.savetxt('/tmp/dhf.csv', dhf) # optimal DH (final)
+
 
 if __name__ == "__main__":
     main()
