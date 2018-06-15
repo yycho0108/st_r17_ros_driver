@@ -115,7 +115,7 @@ class GraphSlamROS(object):
             dh = np.reshape(dh, [-1,4])
         except Exception as e:
             rospy.logerr_throttle(1.0, 'Setting DH Failed : {}'.format(dh))
-        self._dh0 = dh
+        #self._dh0 = dh
 
     def data_cb(self, joint_msg, detection_msgs):
         # set info-mat param

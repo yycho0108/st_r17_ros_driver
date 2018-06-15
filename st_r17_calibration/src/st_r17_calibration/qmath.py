@@ -1,4 +1,5 @@
 import numpy as np
+from tf import transformations as tx
 """
 Quaternion / Transformation Maths related to Graph Slam derivation.
 TODO : cleanup structure + syntax + documentation
@@ -25,12 +26,27 @@ def axh2q(ax,h):
     return np.concatenate([v,[r]], axis=-1)
 
 def q2R(q):
+    #return tx.quaternion_matrix(q)[:3,:3]
     qx,qy,qz,qw = q
     qx2,qy2,qz2,qw2 = np.square(q)
     R = [[1 - 2*qy2 - 2*qz2,	2*qx*qy - 2*qz*qw,	2*qx*qz + 2*qy*qw],
             [2*qx*qy + 2*qz*qw,	1 - 2*qx2 - 2*qz2,	2*qy*qz - 2*qx*qw],
             [2*qx*qz - 2*qy*qw,	2*qy*qz + 2*qx*qw,	1 - 2*qx2 - 2*qy2]]
     return np.asarray(R, dtype=np.float64)
+
+def R2q(R):
+    #M = np.zeros((4,4), dtype=np.float32)
+    #M[:3,:3] = R
+    #M[3,3] = 1.0
+    #return tx.quaternion_from_matrix(M)
+    w = np.sqrt(np.maximum(0,1.0+R[0,0]+R[1,1]+R[2,2]))/2.0;
+    x = np.sqrt(np.maximum(0,1.0+R[0,0]-R[1,1]-R[2,2]))/2.0;
+    y = np.sqrt(np.maximum(0,1.0-R[0,0]+R[1,1]-R[2,2]))/2.0;
+    z = np.sqrt(np.maximum(0,1.0-R[0,0]-R[1,1]+R[2,2]))/2.0;
+    x = np.sign(R[2,1]-R[1,2]) * np.abs(x)
+    y = np.sign(R[0,2]-R[2,0]) * np.abs(y)
+    z = np.sign(R[1,0]-R[0,1]) * np.abs(z)
+    return np.asarray([x,y,z,w], dtype=np.float64)
 
 def qxv(q, v):
     return q2R(q).dot(v)

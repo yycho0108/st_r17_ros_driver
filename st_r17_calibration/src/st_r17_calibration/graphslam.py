@@ -78,7 +78,7 @@ class GraphSlam3(object):
             for i in range(n):
                 nodes[i] = qmath.xadd_abs(nodes[i], dx[i])
 
-            delta = np.mean(np.square(dx))
+            delta = np.sum(np.square(dx))
             #print 'delta', delta
             if delta < tol:
                 #print 'solved'
