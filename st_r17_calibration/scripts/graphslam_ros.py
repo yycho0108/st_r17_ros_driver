@@ -92,7 +92,7 @@ class GraphSlamROS(object):
         #cov = np.divide(1.0, cov)
         #omega = np.diag(cov)
         #self._omega = omega
-        omega = np.diag([1,1,1,5000,5000,5000]).astype(np.float32)
+        omega = np.diag([100,100,100,100,100,100]).astype(np.float32)
         self._omega = omega
         #self._omega = np.eye(6)
 
@@ -180,7 +180,7 @@ class GraphSlamROS(object):
         ox = 1.0 * self._omega
 
         self._graph.append([p, q, zs])
-        if len(self._graph) >= 64:
+        if len(self._graph) >= 128:
             n_poses = 1 + len(self._graph) # add 1 for 0-node constraint
             nodes = []
             edges = []
@@ -225,7 +225,7 @@ class GraphSlamROS(object):
             self._zinit = True
             #print "PRE:"
             #print nodes[-self._num_markers:]
-            nodes = self._slam.optimize(nodes, edges, n_iter=100, tol=1e-12)
+            nodes = self._slam.optimize(nodes, edges, n_iter=100, tol=1e-12, min_iter=100)
             #print "POST:"
             #print nodes[-self._num_markers:]
 

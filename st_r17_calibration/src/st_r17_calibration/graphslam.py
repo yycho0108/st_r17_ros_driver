@@ -4,6 +4,7 @@ GraphSlam 3D Implementation.
 
 import numpy as np
 import qmath
+import scipy.linalg
 
 def block(ar):
     """ Convert Block Matrix to Dense Matrix """
@@ -84,7 +85,7 @@ class GraphSlam3(object):
         #x = np.concatenate([p,qmath.T(q)], axis=-1)
         #self._b[0,0,:,0] = x
 
-    def optimize(self, nodes, edges, n_iter=10, tol=1e-4):
+    def optimize(self, nodes, edges, n_iter=10, tol=1e-4, min_iter=0):
         """ Offline Version """
         n = len(nodes)
         for it in range(n_iter):
@@ -107,7 +108,9 @@ class GraphSlam3(object):
 
             #mI = self._lambda * np.eye(*H.shape) # marquardt damping
             mI = np.diag(np.diag(H))* self._lambda
-            dx = np.linalg.lstsq(H+mI,-b, rcond=None)[0]
+            #dx = np.linalg.lstsq(H+mI,-b, rcond=None)[0]
+            dx = scipy.linalg.cho_solve(
+                    scipy.linalg.cho_factor(H+mI), -b)
             dx = np.reshape(dx, [-1,6]) # [x1, l0, ... ln]
 
             for i in range(n):
