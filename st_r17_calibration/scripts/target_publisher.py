@@ -30,17 +30,10 @@ class SimpleTargetPublisher(object):
     def __init__(self):
         rospy.init_node('simple_target_publisher')
 
-        # defaults
-        dhs = [
-                [np.pi, 0, -(0.033 + 0.322), 0],
-                [np.pi/2, 0, 0, -np.pi/2],
-                [0, 0.375, 0, 0],
-                [0, 0.375, 0.024, np.pi/2],
-                [np.pi/2, 0, 0.042, 1.176],
-                [0, -0.012, 0.159, np.pi]
-                ]
+        self._dh = rospy.get_param('~dh', default=None)
+        if self._dh is None:
+            raise ValueError('Improper DH Parameters Input : {}'.format(self._dh))
 
-        self._dhs = np.float32(dhs)
         self._rate = rospy.get_param('~rate', default=50)
         self._zero = rospy.get_param('~zero', default=False)
         self._smooth = rospy.get_param('~smooth', default=True)
@@ -94,7 +87,7 @@ class SimpleTargetPublisher(object):
 
         if self._zero:
             jpos *= 0
-        txn, rxn = fk(self._dhs, np.concatenate( [jpos, [0]] ))
+        txn, rxn = fk(self._dh, np.concatenate( [jpos, [0]] ))
 
         ## base_link --> object
         M07 = [tx.compose_matrix(translate = xyz, angles=rpy) for (xyz, rpy) in zip(self._xyz, self._rpy)]

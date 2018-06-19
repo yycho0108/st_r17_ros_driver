@@ -178,18 +178,25 @@ class GraphSlamROS(object):
             return
 
         ### semi-offline batch optimization
+        ox = 0.000001 * self._omega
+
         self._graph.append([p, q, zs])
-        if len(self._graph) > 200:
-            n_poses = len(self._graph)
+        if len(self._graph) >= 64:
+            n_poses = 1 + len(self._graph) # add 1 for 0-node constraint
             nodes = []
             edges = []
             z_nodes = [[] for _ in range(self._num_markers)]
+
+            # add 0-node
+            nodes.append( np.asarray([0,0,0, 0,0,0,1]) )
+
             for g in self._graph:
-                xi = len(nodes) # pose index
+                xi = len(nodes) # current pose index
 
                 gp, gq, gz = g
                 gx = np.concatenate([gp,gq], axis=0)
                 nodes.append(gx)
+                edges.append([0, xi, gx, ox])
                 # TODO : handle scenarios when a landmark
                 # didn't appear in 200 observations
                 for _, zi, dz, zo in gz:
@@ -199,23 +206,24 @@ class GraphSlamROS(object):
                     #if not self._zinit:
                     zp_a, zq_a = qmath.x2pq(qmath.xadd_rel(gx, dz, T=False))
                     z_nodes[zi-2].append([zp_a, zq_a])
-            #if self._zinit:
-            #    # use the previous initialization for landmarks
-            #    for zp, zq in self._z_nodes:
-            #        zx = np.concatenate([zp,zq], axis=0)
-            #        nodes.append(zx)
-            #else:
-            # initialize landmarks with average over 200 samples
-            for zi, zn in enumerate(z_nodes):
-                zp, zq = zip(*zn)
-                zp   = np.mean(zp, axis=0)
-                zq   = qmath.qmean(zq)
-                zx   = np.concatenate([zp,zq], axis=0)
-                nodes.append(zx)
+            if self._zinit:
+                # use the previous initialization for landmarks
+                for zp, zq in self._z_nodes:
+                    zx = np.concatenate([zp,zq], axis=0)
+                    nodes.append(zx)
+            else:
+                #initialize landmarks with average over 200 samples
+                for zi, zn in enumerate(z_nodes):
+                    zp, zq = zip(*zn)
+                    zp   = np.mean(zp, axis=0)
+                    zq   = qmath.qmean(zq)
+                    zx   = np.concatenate([zp,zq], axis=0)
+                    nodes.append(zx)
+
             self._zinit = True
             #print "PRE:"
             #print nodes[-self._num_markers:]
-            nodes = self._slam.optimize(nodes, edges, n_iter=100, tol=1e-6)
+            nodes = self._slam.optimize(nodes, edges, n_iter=100, tol=1e-9)
             #print "POST:"
             #print nodes[-self._num_markers:]
 
@@ -271,8 +279,10 @@ class GraphSlamROS(object):
         #    return
         ### END : online slam with reasonable initialization
 
-        dp, dq = qmath.xrel(self._p, self._q, p, q)
-        dx     = np.concatenate([dp,dq], axis=0)
+        #dp, dq = qmath.xrel(self._p, self._q, p, q)
+        #dx     = np.concatenate([dp,dq], axis=0)
+        dx      = np.concatenate([p,q], axis=0)
+        self._slam._nodes[0] = np.asarray([0,0,0,0,0,0,1], dtype=np.float32)
 
         # save p-q
         #self._p = p

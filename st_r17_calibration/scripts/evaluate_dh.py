@@ -18,6 +18,18 @@ def hide_axis(ax):
     ax.spines['right'].set_color('none')
     ax.tick_params(labelcolor='w', top='off', bottom='off', left='off', right='off')
 
+def equal_axis(ax, data):
+    mx = np.max(data, axis=0)
+    mn = np.min(data, axis=0)
+    md = (mx + mn) / 2.0
+    wd = np.max(mx-mn)
+
+    mx = md + wd/2.0
+    mn = md - wd/2.0
+    ax.set_xlim(mn[0], mx[0])
+    ax.set_ylim(mn[1], mx[1])
+    ax.set_zlim(mn[2], mx[2])
+
 def characterize(txn_err, rxn_err):
     """ Characterize DH Parameter Errors """
     fig = plt.figure(figsize=(9.6, 4.8))
@@ -44,6 +56,7 @@ def characterize(txn_err, rxn_err):
     
     ax_p.scatter(txn_err[:,0], txn_err[:,1], txn_err[:,2])
     ax_q.scatter(rxn_err[:,0], rxn_err[:,1], rxn_err[:,2])
+    equal_axis(ax_q, rxn_err)
 
     #plt.show()
 
@@ -76,6 +89,8 @@ def characterize_v2(xyz, rpy, err):
     ax_q.set_xlabel('R')
     ax_q.set_ylabel('P')
     ax_q.set_zlabel('Y')
+
+    equal_axis(ax_q, rpy)
 
     s = ax_q.scatter(R,P,Y, c=err, cmap=cm)
     fig.colorbar(s, ax=ax_q)

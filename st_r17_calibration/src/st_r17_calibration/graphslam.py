@@ -24,6 +24,37 @@ class GraphSlam3(object):
         self._n_l = n_l
         self._lambda = l
 
+    def add_node(self, i,
+            z, o_z, x=None, o_x=None):
+        """
+        i = node index
+        z = observation
+        o_z = covariance of observation
+        x = source
+        o_x = covariance of source
+
+        TODO : incomplete
+        """
+        self._nodes[i] = z
+        #zp,zq = qmath.x2pq(z)
+        #xp,xq = qmath.x2pq(x)
+
+        ## compute GR
+        #GR0 = np.hstack([np.eye(3), qmath.q2R(xq).T.dot(zp)])
+        #GR1 = qmath.qr2Q(zq)
+        #GR = np.vstack([GR0,GR1])
+
+        ## compute Gy
+        #GY0 = q2R(xq)
+        #GY1 = ql2Q(xq)
+        #GY = np.vstack([GY0,GY1])
+
+        #P_LL = GR.dot(o_x).dot(GR.T) + GY.dot(o_z).dot(GY.T)
+        #P_LX = GR.dot(P_RM)
+
+    def del_node(self, i):
+        pass
+
     def add_edge(self, x, i0, i1, nodes=None):
         if nodes is None:
             n = self._nodes
@@ -68,10 +99,14 @@ class GraphSlam3(object):
                 b[z0]   += Aij.T.dot(o).dot(eij)
                 b[z1]   += Bij.T.dot(o).dot(eij)
 
+            # fix node 0
+            H[0,0] += 1e9 * np.eye(6,6)
+
             H = block(H)
             b = block(b)
 
-            mI = self._lambda * np.eye(*H.shape) # marquardt damping
+            #mI = self._lambda * np.eye(*H.shape) # marquardt damping
+            mI = np.diag(np.diag(H))* self._lambda
             dx = np.linalg.lstsq(H+mI,-b, rcond=None)[0]
             dx = np.reshape(dx, [-1,6]) # [x1, l0, ... ln]
 
@@ -79,12 +114,10 @@ class GraphSlam3(object):
                 nodes[i] = qmath.xadd_abs(nodes[i], dx[i])
 
             delta = np.sum(np.square(dx))
-            #print 'delta', delta
             if delta < tol:
                 #print 'solved'
                 break
         return nodes
-
 
     def step(self, x=None, zs=None):
         """ Online Version """
@@ -160,7 +193,7 @@ class GraphSlam3(object):
                 self._nodes[i] = qmath.xadd_abs(self._nodes[i], self._alpha*dx[i-1])
 
         # replace previous node with current position
-        self._nodes[0] = self._nodes[1].copy()
+        #self._nodes[0] = self._nodes[1].copy()
 
         H = unblock(H, (6,6))
         B = unblock(B, (6,1))
