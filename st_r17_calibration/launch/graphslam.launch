@@ -1,6 +1,6 @@
 <launch>
     <arg name="num_markers" default="4"/>
-    <arg name="noise" default="true"/>
+    <arg name="noise" default="0.01"/>
     <arg name="slop" default="0.005"/>
 	<arg name="marquardt" default="0.01"/>
 

@@ -1,0 +1,13 @@
+<launch>
+	<arg name="num_markers" default="4"/>
+	<arg name="slop" default="0.01"/>
+	<arg name="noise" default="0.01"/>
+
+	<node pkg="st_r17_calibration" name="data_collector" type="data_collector.py" output="screen">
+		<param name="num_markers" value="$(arg num_markers)"/>
+		<param name="slop" value="$(arg slop)"/>
+		<param name="noise" value="$(arg noise)"/>
+        <rosparam command="load" file="$(find st_r17_calibration)/config/dh.yaml"/>
+        <remap from="joint_states" to="/st_r17/joint_states"/>
+	</node>
+</launch>

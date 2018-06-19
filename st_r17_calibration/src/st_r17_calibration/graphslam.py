@@ -115,6 +115,7 @@ class GraphSlam3(object):
 
             delta = np.sum(np.square(dx))
             if delta < tol:
+                print 'it : {}'.format(it)
                 #print 'solved'
                 break
         return nodes

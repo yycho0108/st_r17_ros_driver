@@ -52,7 +52,7 @@ class GraphSlamROS(object):
         self._tfl = tf.TransformListener()
 
         self._num_markers = rospy.get_param('~num_markers', default=4)
-        self._noise = rospy.get_param('~noise', default=True)
+        self._noise = rospy.get_param('~noise', default=0.01)
         self._slop = rospy.get_param('~slop', default=0.01)
         self._marquardt = rospy.get_param('~marquardt', default=0.01)
 
@@ -62,15 +62,14 @@ class GraphSlamROS(object):
         self._dh = np.float32(self._dh)
 
         # add noise to dh ... or else.
-        if self._noise:
-            sc = 1.0 * np.float32([np.deg2rad(1.0), 0.01, 0.01, np.deg2rad(1.0)])
+        if self._noise > 0.0:
             # for testing with virtual markers, etc.
             z = np.random.normal(
                     loc = 0.0,
-                    scale = sc,
+                    scale=self._noise,
                     size = np.shape(self._dh)
                     )
-            z = np.clip(z, -2*sc, 2*sc)
+            z = np.clip(z, -2*self._noise, 2*self._noise)
             dh = np.add(self._dh, z)
         else:
             # for testing for real!
@@ -93,7 +92,7 @@ class GraphSlamROS(object):
         #cov = np.divide(1.0, cov)
         #omega = np.diag(cov)
         #self._omega = omega
-        omega = np.diag([1,1,1,1,1,1])
+        omega = np.diag([1,1,1,5000,5000,5000]).astype(np.float32)
         self._omega = omega
         #self._omega = np.eye(6)
 
@@ -178,7 +177,7 @@ class GraphSlamROS(object):
             return
 
         ### semi-offline batch optimization
-        ox = 0.000001 * self._omega
+        ox = 1.0 * self._omega
 
         self._graph.append([p, q, zs])
         if len(self._graph) >= 64:
@@ -219,11 +218,14 @@ class GraphSlamROS(object):
                     zq   = qmath.qmean(zq)
                     zx   = np.concatenate([zp,zq], axis=0)
                     nodes.append(zx)
+                lms = nodes[-self._num_markers:]
+                lms = [qmath.x2pq(x) for x in lms]
+                self._pub_ze.publish(msgn(lms,rospy.Time.now())) 
 
             self._zinit = True
             #print "PRE:"
             #print nodes[-self._num_markers:]
-            nodes = self._slam.optimize(nodes, edges, n_iter=100, tol=1e-9)
+            nodes = self._slam.optimize(nodes, edges, n_iter=100, tol=1e-12)
             #print "POST:"
             #print nodes[-self._num_markers:]
 

@@ -7,7 +7,7 @@
 	<arg name="ground_truth" default="false"/>
 	<arg name="smooth" default="true"/>
 
-	<node pkg="st_r17_calibration" name="target_publisher" type="target_publisher.py">
+	<node pkg="st_r17_calibration" name="target_publisher" type="target_publisher.py" output="screen">
 		<param name="num_markers" value="$(arg num_markers)"/>
 		<param name="zero" value="$(arg zero)"/>
 		<param name="rate" value="$(arg rate)"/>
