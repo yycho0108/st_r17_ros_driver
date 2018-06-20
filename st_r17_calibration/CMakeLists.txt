@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(st_r17_calibration)
+LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules/)
+
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11)
@@ -18,6 +20,44 @@ find_package(catkin REQUIRED COMPONENTS
 	moveit_ros_planning_interface
 	moveit_core
     )
+find_package(Eigen3 REQUIRED)
+find_package(CSparse REQUIRED)
+find_package(Cholmod REQUIRED)
+find_package(G2O REQUIRED)
+
+LIST(APPEND G2O_LIBS
+	cxsparse
+	cholmod
+
+	g2o_cli
+	g2o_core
+	g2o_csparse_extension
+	g2o_ext_freeglut_minimal
+	#g2o_incremental
+	#g2o_interactive
+	g2o_interface
+	#g2o_opengl_helper
+	g2o_parser
+	#g2o_simulator
+	g2o_solver_cholmod
+	g2o_solver_csparse
+	g2o_solver_dense
+	g2o_solver_eigen
+	#g2o_solver_pcg
+	#g2o_solver_slam2d_linear
+	#g2o_solver_structure_only
+	g2o_stuff
+	g2o_types_data
+	#g2o_types_icp
+	#g2o_types_sba
+	#g2o_types_sclam2d
+	#g2o_types_sim3
+	#g2o_types_slam2d_addons
+	#g2o_types_slam2d
+	g2o_types_slam3d_addons
+	g2o_types_slam3d
+	)
+
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -122,6 +162,12 @@ catkin_package(
 include_directories(
     # include
     ${catkin_INCLUDE_DIRS}
+
+	${EIGEN3_INCLUDE_DIR}
+	${CSPARSE_INCLUDE_DIR}
+	${Cholmod_INCLUDE_DIR}
+	${G2O_INCLUDE_DIR}
+	/usr/include/suitesparse
     )
 
 ## Declare a C++ library
@@ -147,6 +193,7 @@ target_link_libraries(scouter
 add_executable(slam src/slam.cpp)
 target_link_libraries(slam
 	${catkin_LIBRARIES}
+	${G2O_LIBS}
 	)
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the

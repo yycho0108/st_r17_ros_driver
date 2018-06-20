@@ -151,7 +151,7 @@ class Slam{
 			_initialized &= (_batch_size > 0);
 			std::vector<float> dhv;
 
-			_initialized &= _nh.getParam("~dh", dhv); // dh parameter must be supplied!
+			_initialized &= _nh.getParam("~dh_flat", dhv); // dh parameter must be supplied!
 			_initialized &= set_dh(dhv); // dh parameter must be valid!
 			_initialized &= _nh.getParam("~joints", _joints); // joint order
 
@@ -229,7 +229,7 @@ class Slam{
 
 	void reset(){
 		// initialize containers ...
-		estimates.resize(_num_markers); // TODO : consider struct for better readibility
+		estimates.resize(_num_markers);
 
 		_opt.clear(); // automatically deletes all vertices/edges
 		// TODO : investigate if other side-effects exist
