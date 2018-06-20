@@ -144,6 +144,10 @@ target_link_libraries(scouter
 	${catkin_LIBRARIES}
 	)
 
+add_executable(slam src/slam.cpp)
+target_link_libraries(slam
+	${catkin_LIBRARIES}
+	)
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use

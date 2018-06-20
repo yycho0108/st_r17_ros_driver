@@ -89,7 +89,7 @@ class DataCollector(object):
                 if i >= self._num_markers:
                     continue
                 self._i2m[i] = m_id
-                obs.append([i, p, q])
+                obs.append([m_id, p, q])
         except Exception as e:
             rospy.logerr_throttle(1.0, 'TF Failed : {}'.format(e))
 
