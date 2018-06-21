@@ -25,6 +25,8 @@
 
 /* ROS STUFF */
 #include <sensor_msgs/JointState.h>
+#include <geometry_msgs/PoseArray.h>
+
 #include <apriltags2_ros/AprilTagDetectionArray.h>
 #include <message_filters/synchronizer.h>
 #include <message_filters/sync_policies/approximate_time.h>
@@ -49,7 +51,7 @@ struct Estimate{
 
 void dh2T(const DH& dh,
 		const float q,
-		Eigen::Matrix4f& dst
+		Eigen::Matrix4d& dst
 		){
 	float cq = cos(q + dh.dq);
 	float sq = sin(q + dh.dq);
@@ -65,12 +67,12 @@ void dh2T(const DH& dh,
 void forward_kinematics(
 		const std::vector<DH>& dh,
 		const std::vector<float>& j,
-		Eigen::Matrix4f& T,
-		Eigen::Matrix4f& tmp
+		Eigen::Matrix4d& T,
+		Eigen::Matrix4d& tmp
 		){
 	T.setIdentity();
 
-	//Eigen::Matrix4f T = Eigen::Matrix4f::Identity();
+	//Eigen::Matrix4d T = Eigen::Matrix4d::Identity();
 	int n = dh.size();
 	//assert(n == j.size());
 	for(int i=0; i<n; ++i){
@@ -112,12 +114,14 @@ class Slam{
 	// parameters
 	int _num_markers;
 	int _batch_size;
+	float _tol;
 	bool _initialized;
 	int _max_iter;
 	std::vector<DH> _dh;
 	std::vector<std::string> _joints;
 	std::string _frame_o, _frame_c;
 	bool _verbose;
+	float _noise;
 
 	// handles
 	ros::NodeHandle& _nh;
@@ -127,50 +131,63 @@ class Slam{
 	message_filters::Subscriber<apriltags2_ros::AprilTagDetectionArray> _d_sub;
 	message_filters::Synchronizer<MySyncPolicy> _sync;
 	ros::Publisher _l_pub;
+	ros::Publisher _l_viz_pub;
 
 	// temporaries ...
-	Eigen::Matrix4f T;
-	Eigen::Matrix4f tmp;
+	Eigen::Matrix4d T;
+	Eigen::Matrix4d tmp;
+	int _m_idx;
 
 	// vertices ...
 	std::vector<Estimate> estimates;
 
+	// testing - noise handlers
+	std::default_random_engine r_gen;
+	std::normal_distribution<double> n_dist;
+
   public:
 	Slam(ros::NodeHandle& nh):
-		_nh(nh), _tfl(_nh){
+		_nh(nh), _tfl(_nh), _sync(MySyncPolicy(20), _j_sub, _d_sub){
+			
 			// load parameters		
 			ros::param::param<int>("~num_markers", _num_markers, 4);
+			_initialized = true;
 			_initialized &= (_num_markers > 0);
 			ros::param::param<int>("~batch_size", _batch_size, 32);
 			ros::param::param<float>("~tol", _tol, 1e-6); //NOT USED FOR NOW
-			ros::param::param<float>("~max_iter", _max_iter, 100);
+			ros::param::param<int>("~max_iter", _max_iter, 100);
 			ros::param::param<std::string>("~frame_o", _frame_o, "base_link");
 			ros::param::param<std::string>("~frame_c", _frame_c, "stereo_optical_link");
 			ros::param::param<bool>("~verbose", _verbose, false);
+			ros::param::param<float>("~noise", _noise, 0.0);
+
+			// testing -- initialize random engine
+			r_gen.seed( time(0) );
+			n_dist.param(std::normal_distribution<double>::param_type(0, _noise));
 
 			_initialized &= (_batch_size > 0);
 			std::vector<float> dhv;
 
-			_initialized &= _nh.getParam("~dh_flat", dhv); // dh parameter must be supplied!
+			_initialized &= _nh.getParam("dh_flat", dhv); // dh parameter must be supplied!
+			ROS_INFO("DH Parameter Input Size : %d", dhv.size());
 			_initialized &= set_dh(dhv); // dh parameter must be valid!
-			_initialized &= _nh.getParam("~joints", _joints); // joint order
-
-			if(!_initialized){
-				ROS_ERROR("Initialization Failed; Aborting");
-			}
+			_initialized &= _nh.getParam("joints", _joints); // joint order
 
 			// initialize g2o
 			g2o::BlockSolver_6_3::LinearSolverType* linearSolver = new g2o::LinearSolverCholmod<g2o::BlockSolver_6_3::PoseMatrixType>();
-			g2o::BlockSolver_6_3* solver_ptr = new g2o::BlockSolver(linearSolver)
-				g2o::OptimizationAlgorithmLevenberg* alg = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
+			g2o::BlockSolver_6_3* solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
+			g2o::OptimizationAlgorithmLevenberg* alg = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
 			_opt.setAlgorithm(alg);
+			_opt.setVerbose(_verbose);
 			this->reset();
 
 			// initialize handles
-			_l_pub = nh.advertise<AprilTagDetectionArray>("/base_to_target", 10);
+			_l_pub = nh.advertise<apriltags2_ros::AprilTagDetectionArray>("/base_to_target", 10);
+			_l_viz_pub = nh.advertise<geometry_msgs::PoseArray>("/base_to_target_viz", 10);
 			_j_sub.subscribe(nh, "/joint_states", 10);
 			_d_sub.subscribe(nh, "/stereo_to_target", 10);
-			_sync = message_filters::Synchronizer<>(MySyncPolicy(20, _j_sub, _d_sub));
+
+			//_sync = message_filters::Synchronizer<MySyncPolicy>(MySyncPolicy(20), _j_sub, _d_sub);
 			_sync.registerCallback(
 					boost::bind(&Slam::data_cb, this, _1, _2));
 		}
@@ -180,47 +197,63 @@ class Slam{
 	}
 
 	void run(){
+		if(!_initialized){
+			ROS_ERROR("Initialization Failed; Aborting");
+			return;
+		}
+
 		ros::Rate rate(50);
 		while(ros::ok()){
+			ros::spinOnce();
 			this->step();
 			rate.sleep();
 		}
 	}
 
 	void publish(){
-		AprilTagDetectionArray msg;
-		ros::Time stamp = ros::Time::now():
+		apriltags2_ros::AprilTagDetectionArray msg;
+		geometry_msgs::PoseArray viz_msg;
+		ros::Time stamp = ros::Time::now();
 		// 1. build message
 		msg.header.stamp = stamp;	
 		msg.header.frame_id = this->_frame_o;
 
+		viz_msg.header.stamp = stamp;
+		viz_msg.header.frame_id = this->_frame_o;
+
 		for(int i=0; i<_num_markers;++i){
-			AprilTagDetection det;
+			geometry_msgs::Pose p;
+
+			apriltags2_ros::AprilTagDetection det;
 			det.id.push_back(i);
 			det.size.push_back(0.0); // not really used
 			det.pose.header.stamp = stamp;
 			det.pose.header.frame_id = this->_frame_o; // TODO : check if this is consistent
-			pose_from_iso(estimates[i].seen, det.pose.pose.pose); // TODO : fill in covariance information
+			pose_from_iso(estimates[i].value, det.pose.pose.pose); // TODO : fill in covariance information
+			pose_from_iso(estimates[i].value, p);
 			msg.detections.push_back(det);
+			viz_msg.poses.push_back(p);
 		}
-		
+
 		// 2. publish message
 		_l_pub.publish(msg);
+		_l_viz_pub.publish(viz_msg);
 	}
 
 	void step(){
 		if(this->_m_idx > this->_batch_size){
 			for(auto& e : this->estimates){
-				if(!e.second){
+				if(!e.seen){
 					ROS_WARN_THROTTLE(1.0, "Landmarks Haven't Been Fully Initialized");
 					// some of the landmarks have not been seen yet
 					return; 
 				}
 			}
-			_opt.optimize(this->_max_iter, false);
+			_opt.initializeOptimization();
+			_opt.optimize(this->_max_iter, false); // see if online=true will work
 			for(int i=0;i<_num_markers;++i){
-				auto v = opt.vertex(i+1); // account for 1-offset
-				estimates[i].value = v->estimate();
+				auto v = _opt.vertex(i+1); // account for 1-offset
+				estimates[i].value = static_cast<VertexSE3*>(v)->estimate();
 			}
 			this->publish();
 			this->reset();
@@ -238,7 +271,7 @@ class Slam{
 		auto v0 = new g2o::VertexSE3();
 		Eigen::Quaterniond q(1.0,0.0,0.0,0.0); //wxyz
 		Eigen::Vector3d t(0,0,0);
-		v0->setEstimate(g2o::SE3Quat(q0,t0));
+		v0->setEstimate(g2o::SE3Quat(q,t));
 		v0->setFixed(true);
 		v0->setId(0);
 		_opt.addVertex(v0);
@@ -257,16 +290,18 @@ class Slam{
 	}
 
 	g2o::VertexSE3* add_motion(Eigen::Isometry3d& x){
+		int i0 = (1 + _num_markers);
 		auto v = new g2o::VertexSE3();
 		v->setEstimate(x);
-		v->setId(this->_m_idx);
+		v->setId(i0 + this->_m_idx);
 		_opt.addVertex(v);
 
 		auto e = new g2o::EdgeSE3();
-		e.setVertex(0, _opt.vertex(0));
-		e.setVertex(1, v);
-		e.setInformation(100.0 * Eigen::Matrix3d::Identity());
-		e.setMeasurement(x);
+		e->setVertex(0, _opt.vertex(0));
+		e->setVertex(1, v);
+		e->setInformation(100.0 * Eigen::Matrix<double,6,6>::Identity()); //
+		
+		e->setMeasurement(x);
 		_opt.addEdge(e);
 
 		++this->_m_idx;
@@ -275,28 +310,24 @@ class Slam{
 
 	g2o::VertexSE3* add_landmark(int l_idx, Eigen::Isometry3d& x){
 		// only adds vertex
-		if(estimates[l_idx].seen){
-			return _opt.vertex(1 + l_idx);
-		}else
-			auto v = new g2o::VertexSE3();
-			v->setEstimate(x);
-			v->setId(1+l_idx);
-			_opt.addVertex(v);
+		g2o::VertexSE3* v = dynamic_cast<g2o::VertexSE3*>(_opt.vertex(1 + l_idx));
 
+		if(!estimates[l_idx].seen){
+			// initialize with guess
+			v->setEstimate(x);
 			estimates[l_idx].value = x;
 			estimates[l_idx].seen = true;
-
-			return v;
 		}
+		return v;
 	}
 
 	void data_cb(const sensor_msgs::JointStateConstPtr& j_msg, const apriltags2_ros::AprilTagDetectionArrayConstPtr& d_msg){
 		// enforce at least 1 visible detection
-		if(d_msg.detections.size() <= 0){
+		if(d_msg->detections.size() <= 0){
 			return;
 		}
 
-		int n = j_msg.position.size();
+		int n = j_msg->position.size();
 
 		// NOTE: n-th joint is hard-coded to be fixed to account for final static transformation.(ee -> camera)
 		std::vector<float> jpos(n+1);
@@ -304,8 +335,8 @@ class Slam{
 		// reorder joint values ...
 		for(int i=0; i<n; ++i){
 			for(int j=0; j<n; ++j){
-				if(_joints[i] == j_msg.name[j]){
-					jpos[i] = j_msg.position[j];
+				if(_joints[i] == j_msg->name[j]){
+					jpos[i] = j_msg->position[j];
 				}
 			}
 		}
@@ -316,34 +347,40 @@ class Slam{
 		}
 
 		forward_kinematics(this->_dh, jpos, T, tmp);
-		Eigen::Isometry3d T_oc = T; // set from matrix, TODO : just set directly? idk
+		Eigen::Isometry3d T_oc;
+
+		T_oc.matrix() = T; //??
+
+		//	= T; // set from matrix, TODO : just set directly? idk
 		// T_oc = Transformation from origin(base_link) -> camera
 		
-		auto v = this->add_motion(T_oc)
+		geometry_msgs::PoseStamped tfm0, tfm1;
+
+		auto v = this->add_motion(T_oc);
 		try{
-			for(auto& d : d_msg.detections){
+			for(auto& d : d_msg->detections){
 				int idx = d.id[0]; // landmark index
 
 				// transform pose to reference frame_c
-				tfm.header.stamp = d_msg.header.stamp;
-				tfm.header.frame_id = d_msg.header.frame_id; // TODO : check valid
-				tfm.pose = d.pose.pose.pose;
-				_tfl.transformPose(self._frame_c, tfm0, tfm1);
+				tfm0.header.stamp = d_msg->header.stamp;
+				tfm0.header.frame_id = d_msg->header.frame_id; // TODO : check valid
+				tfm0.pose = d.pose.pose.pose;
+				_tfl.transformPose(this->_frame_c, tfm0, tfm1);
 
 				// --> tfm1
 				Eigen::Isometry3d T_cz; // Transformation from camera -> landmark
-				iso_from_pose(tfm1, T_cz);
+				iso_from_pose(tfm1.pose, T_cz);
 				Eigen::Isometry3d T_oz = T_oc * T_cz; // transformation from base_link -> landmark
 				auto v_z = this->add_landmark(idx, T_oz); // add guess if it doesn't exist yet
 
 				// add corresponding landmark edge
-				e = new g2o::EdgeSE3();
-				e.setVertex(0, v);
-				e.setVertex(1, v_z);
-				e.setInformation(100.0 * Eigen::Matrix3d::Identity());
+				auto e = new g2o::EdgeSE3();
+				e->setVertex(0, v);
+				e->setVertex(1, v_z);
+				e->setInformation(100.0 * Eigen::Matrix<double,6,6>::Identity());
 				// TODO : configurable information matrix
-				e.setMeasurement(T_cz);
-				_opt.addEdge(e)
+				e->setMeasurement(T_cz);
+				_opt.addEdge(e);
 			}
 		}catch(const tf::LookupException& e){
 			ROS_WARN("TF Lookup Exception");
@@ -362,16 +399,31 @@ class Slam{
 
 		if(! (n%4 == 0)){
 			ROS_WARN_THROTTLE(1.0, "Invalid DH Parameters; ignored");
-			return false
+			return false;
 		}
 
-		self._dh.clear();
+		this->_dh.clear();
 		for(int i0=0; i0<n; i0+=4){
-			self._dh.push_back(DH{src[i0], src[i0+1], src[i0+2], src[i0+3]});
+			DH dh_i{src[i0], src[i0+1], src[i0+2], src[i0+3]};
+			if(this->_noise > 0){
+				dh_i.alpha += n_dist(r_gen);
+				dh_i.a     += n_dist(r_gen);
+				dh_i.d     += n_dist(r_gen);
+				dh_i.dq     += n_dist(r_gen);
+			}
+			this->_dh.push_back(dh_i);
 		}
 		return true;
 	}
 };
+
+int main(int argc, char* argv[]){
+	ros::init(argc, argv, "slam");
+	ros::NodeHandle nh;
+	Slam slam(nh);
+	slam.run();
+	return 0;
+}
 
 // REFERENCE
 //int main(int argc, const char* argv[]){

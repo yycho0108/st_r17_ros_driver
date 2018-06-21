@@ -4,15 +4,35 @@
     <arg name="slop" default="0.005"/>
 	<arg name="marquardt" default="0.01"/>
 
+	<!--
     <node name="graphslam" pkg="st_r17_calibration" type="graphslam_ros.py"
         output="screen"
         >
         <param name="num_markers" value="$(arg num_markers)"/>
-        <param name="noise" value="$(arg noise)"/> <!-- useful for testing in sim -->
+        <param name="noise" value="$(arg noise)"/>
         <param name="slop" value="$(arg slop)"/>
 		<param name="marquardt" value="$(arg marquardt)"/>
         <rosparam command="load" file="$(find st_r17_calibration)/config/dh.yaml"/>
-        <!--<remap from="stereo_to_target" to="/tag_detections"/>-->
+        <remap from="joint_states" to="/st_r17/joint_states"/>
+    </node>
+	-->
+
+	<rosparam param="joints">["waist", "shoulder", "elbow", "hand", "wrist"]</rosparam>
+	<rosparam command="load" file="$(find st_r17_calibration)/config/dh.yaml"/>
+
+    <node name="slam" pkg="st_r17_calibration" type="slam"
+		output="screen"
+        >
+        <param name="noise" value="$(arg noise)"/>
+        <param name="num_markers" value="$(arg num_markers)"/>
+		<param name="batch_size" value="1024"/>
+		<param name="max_iter" value="100"/>
+		<param name="verbose" value="true"/>
+		<!--
+        <param name="noise" value="$(arg noise)"/>
+        <param name="slop" value="$(arg slop)"/>
+		<param name="marquardt" value="$(arg marquardt)"/>
+		-->
         <remap from="joint_states" to="/st_r17/joint_states"/>
     </node>
 </launch>

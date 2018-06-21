@@ -154,7 +154,7 @@ def dedDH(dhs, qs, t0n, q0n):
         dtddh = dtdDH(dh)
         drddh = dRdDH(dh)
         R_pre = rtree[0,i]
-        deddh_i[:3,:] = R_pre.dot(dtddh)
+        #deddh_i[:3,:] = R_pre.dot(dtddh)
 
         dt = np.zeros(shape=(3), dtype=np.float64)
         #lhs = np.zeros(shape=(3,1,3,3), dtype=np.float64)
@@ -162,7 +162,7 @@ def dedDH(dhs, qs, t0n, q0n):
             R_post = rtree[i+1,j]
             #lhs += testDelta(R_pre, R_post, ts[j])
             dt += R_post.dot(ts[j]).T
-        deddh_i[:3,:] += R_pre.dot(dRxdDH(dh, dt))
+        #deddh_i[:3,:] += R_pre.dot(dRxdDH(dh, dt))
         ##lhs = np.squeeze(lhs,axis=1)
         #R_pre_s = np.reshape(R_pre, [1,3,3])
         #dts = np.reshape(dts, [3,1,1])
@@ -184,7 +184,6 @@ def dedDH(dhs, qs, t0n, q0n):
                 #Q0n,
                 dqdDH(dh)
                 )
-        deddh_i[3:,:] *= 2.0 # rotation-scaling
         #== d(err)/d(dh_i)
         res.append(deddh_i)
     res = np.stack(res, axis=1) # [N_ERR, N_JNT, N_DHP]
@@ -206,12 +205,14 @@ class DHCalibratorNLLS(object):
         self._dh0 = np.copy(dh0) # initial
         self._dh  = np.copy(dh0) # current
     def step(self, js, ps, qs, alpha):
+        pass
 
 def main():
     N_EPOCH = 1000
-    N_STEPS = 32
+    N_STEPS = 128
+    N_ITER = 4
 
-    np.random.seed(5)
+    #np.random.seed(5)
 
     dhs = [[3.141592653589793, 0.0, -0.355, 0.0],
           [1.5707963267948966, 0.0, 0.0, -1.5707963267948966],
@@ -267,18 +268,27 @@ def main():
             # te_pre, qe_pre = np.linalg.norm(t_err), np.linalg.norm(qmath.T(q_err))
             # print 'pre : {}, {}'.format(te_pre, qe_pre)
             # ================
+            #print 'iter'
+            for _ in range(N_ITER):
+                t_err, q_err, deddh = dedDH(dhf, qs_z, t0n_z, q0n_z)
+                # ORDER of deddh = [N_ERR, N_JNT, N_DHP]
+                deddh = np.reshape(deddh, [-1, np.size(dhf)]) # [N_ERR, N_JNT*N_DHP]
+                err = np.concatenate([t_err, qmath.T(q_err)], axis=0)
+                err = np.expand_dims(err, axis=-1)
 
-            t_err, q_err, deddh = dedDH(dhf, qs_z, t0n_z, q0n_z)
-            err = np.concatenate([t_err, qmath.T(q_err)], axis=0)
-            err = np.expand_dims(err, axis=-1)
+                H = deddh.T.dot(deddh)
+                mI = 1000 * alpha * np.diag(np.diag(H))
+                b = deddh.T.dot(err)
+                dddh = np.reshape(
+                        np.linalg.lstsq(H+mI, -b, rcond=None)[0],
+                        dhf.shape)
+                #print np.sum(np.square(dddh))
+                dhf += alpha * dddh
+
+                dhf[:,0] = (dhf[:,0] + np.pi) % (2*np.pi) - np.pi
+                dhf[:,3] = (dhf[:,3] + np.pi) % (2*np.pi) - np.pi
             #err   = [N_ERR]
 
-            # ORDER of deddh = [N_ERR, N_JNT, N_DHP]
-            deddh = np.reshape(deddh, [-1, np.size(dhf)]) # [N_ERR, N_JNT*N_DHP]
-
-            dddh = np.reshape(
-                    np.linalg.lstsq(deddh, -err, rcond=None)[0],
-                    dhf.shape)
 
             # = evaluate post =
             #t_err, q_err, _ = dedDH(dhf + dddh, qs, t0n, q0n)
@@ -319,19 +329,19 @@ def main():
         #dhf[:,1] += np.mean(ddhs[:, :, 1], axis=0)
         #dhf[:,2] += np.mean(ddhs[:, :, 2], axis=0)
         #dhf[:,3] += ddh_q
-        dhf += alpha*np.mean(ddhs, axis=0)
+        #dhf += alpha*np.mean(ddhs, axis=0)
 
         #dhf = dhf + alpha * np.reshape(ddh / N_STEPS, dhf.shape)
-        dhf[:,0] = (dhf[:,0] + np.pi) % (2*np.pi) - np.pi
-        dhf[:,3] = (dhf[:,3] + np.pi) % (2*np.pi) - np.pi
+        #dhf[:,0] = (dhf[:,0] + np.pi) % (2*np.pi) - np.pi
+        #dhf[:,3] = (dhf[:,3] + np.pi) % (2*np.pi) - np.pi
         delta_a, delta_l = get_delta(dhs, dhf)
         delta_n = delta_a + delta_l
         errs.append(delta_n)
 
         if delta_n > delta:
-            alpha *= 0.99
+            alpha *= 0.8
         else:
-            alpha *= 1.01
+            alpha *= 1.2
 
         delta = delta_n
 
