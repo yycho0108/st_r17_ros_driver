@@ -35,11 +35,13 @@ class DHCalibratorROS(object):
         # update params
         self._tfl = tf.TransformListener()
         self._step = 0
-        self._last_update = 0
-        self._update_step = 8
-        self._start_step  = 32 * 4
-        self._batch_size  = 32
-        self._mem_size    = 32 * 64
+        self._last_update  = 0
+        self._update_step  = 8
+        self._start_step   = 32 * 4
+        self._batch_size   = 32
+        self._mem_size     = 32 * 64
+        self._publish_step = 256
+        self._last_publish = 0
 
         # ~dh = nominal DH parameter
         self._dh = rospy.get_param('~dh', default=None)
@@ -223,7 +225,9 @@ class DHCalibratorROS(object):
         # save data ...
         self._errs.append(real_err)
         self._dhf = dhs
-        self._dhpub.publish(DH(data=np.ravel(dhs).astype(np.float32)))
+        if self._step > (self._last_publish + self._publish_step):
+            self._last_publish = self._step
+            self._dhpub.publish(DH(data=np.ravel(dhs).astype(np.float32)))
 
     def save(self):
         try:

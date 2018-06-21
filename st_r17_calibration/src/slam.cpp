@@ -36,6 +36,8 @@
 #include <tf/transform_listener.h>
 #include <tf_conversions/tf_eigen.h>
 
+#include <st_r17_calibration/DH.h>
+
 using namespace Eigen;
 using namespace g2o;
 using namespace std;
@@ -132,6 +134,7 @@ class Slam{
 	message_filters::Synchronizer<MySyncPolicy> _sync;
 	ros::Publisher _l_pub;
 	ros::Publisher _l_viz_pub;
+	ros::Subscriber _dh_sub;
 
 	// temporaries ...
 	Eigen::Matrix4d T;
@@ -186,6 +189,7 @@ class Slam{
 			_l_viz_pub = nh.advertise<geometry_msgs::PoseArray>("/base_to_target_viz", 10);
 			_j_sub.subscribe(nh, "/joint_states", 10);
 			_d_sub.subscribe(nh, "/stereo_to_target", 10);
+			_dh_sub = nh.subscribe("/dh_params", 10, &Slam::dh_cb, this);
 
 			//_sync = message_filters::Synchronizer<MySyncPolicy>(MySyncPolicy(20), _j_sub, _d_sub);
 			_sync.registerCallback(
@@ -194,6 +198,9 @@ class Slam{
 
 	~Slam(){
 		// necessary?
+	}
+	void dh_cb(const st_r17_calibration::DHConstPtr& msg){
+		set_dh(msg->data);
 	}
 
 	void run(){
@@ -250,7 +257,12 @@ class Slam{
 				}
 			}
 			_opt.initializeOptimization();
-			_opt.optimize(this->_max_iter, false); // see if online=true will work
+			int steps = _opt.optimize(this->_max_iter, false); // see if online=true will work
+			if(steps > 0){
+				ROS_INFO("Took %d steps", steps);
+			}else{
+				ROS_WARN("Optimization Failed");
+			}
 			for(int i=0;i<_num_markers;++i){
 				auto v = _opt.vertex(i+1); // account for 1-offset
 				estimates[i].value = static_cast<VertexSE3*>(v)->estimate();

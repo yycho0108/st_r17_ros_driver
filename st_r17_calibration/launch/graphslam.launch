@@ -3,6 +3,8 @@
     <arg name="noise" default="0.01"/>
     <arg name="slop" default="0.005"/>
 	<arg name="marquardt" default="0.01"/>
+	<arg name="batch_size" default="512"/>
+	<arg name="max_iter" default="1000"/>
 
 	<!--
     <node name="graphslam" pkg="st_r17_calibration" type="graphslam_ros.py"
@@ -25,8 +27,8 @@
         >
         <param name="noise" value="$(arg noise)"/>
         <param name="num_markers" value="$(arg num_markers)"/>
-		<param name="batch_size" value="1024"/>
-		<param name="max_iter" value="100"/>
+		<param name="batch_size" value="$(arg batch_size)"/>
+		<param name="max_iter" value="$(arg max_iter)"/>
 		<param name="verbose" value="true"/>
 		<!--
         <param name="noise" value="$(arg noise)"/>
