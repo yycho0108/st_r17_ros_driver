@@ -140,6 +140,7 @@ class Slam{
 	Eigen::Matrix4d T;
 	Eigen::Matrix4d tmp;
 	int _m_idx;
+	int _last_update;
 
 	// vertices ...
 	std::vector<Estimate> estimates;
@@ -173,7 +174,7 @@ class Slam{
 
 			_initialized &= _nh.getParam("dh_flat", dhv); // dh parameter must be supplied!
 			ROS_INFO("DH Parameter Input Size : %d", dhv.size());
-			_initialized &= set_dh(dhv); // dh parameter must be valid!
+			_initialized &= set_dh(dhv, _noise); // dh parameter must be valid!
 			_initialized &= _nh.getParam("joints", _joints); // joint order
 
 			// initialize g2o
@@ -200,7 +201,7 @@ class Slam{
 		// necessary?
 	}
 	void dh_cb(const st_r17_calibration::DHConstPtr& msg){
-		set_dh(msg->data);
+		set_dh(msg->data, 0.0);
 	}
 
 	void run(){
@@ -248,7 +249,7 @@ class Slam{
 	}
 
 	void step(){
-		if(this->_m_idx > this->_batch_size){
+		if( this->_m_idx > this->_batch_size ){
 			for(auto& e : this->estimates){
 				if(!e.seen){
 					ROS_WARN_THROTTLE(1.0, "Landmarks Haven't Been Fully Initialized");
@@ -269,10 +270,40 @@ class Slam{
 			}
 			this->publish();
 			this->reset();
+			this->_last_update = this->_m_idx;
 		}
 	}
 
 	void reset(){
+
+		//if(estimates.size() <= 0){
+		//	// == first initialization
+		//	this->_m_idx = 1;
+
+		//	// add base_link vertex
+		//	auto v0 = new g2o::VertexSE3();
+		//	Eigen::Quaterniond q(1.0,0.0,0.0,0.0); //wxyz
+		//	Eigen::Vector3d t(0,0,0);
+		//	v0->setEstimate(g2o::SE3Quat(q,t));
+		//	v0->setFixed(true);
+		//	v0->setId(0);
+		//	_opt.addVertex(v0);
+
+		//	// add landmark vertices
+		//	for(int i=0; i<_num_markers;++i){
+		//		auto v = new g2o::VertexSE3();
+		//		v->setId(1+i);
+		//		_opt.addVertex(v);
+		//	}
+		//	estimates.resize(_num_markers);
+		//}else{
+		//	for(auto& v : _opt.vertices()){
+		//		if(v.first >= (1+_num_markers)){
+		//			static_cast<VertexSE3*>(v.second)->setMarginalized(true);
+		//		}
+		//	}
+		//}
+
 		// initialize containers ...
 		estimates.resize(_num_markers);
 
@@ -323,6 +354,7 @@ class Slam{
 	g2o::VertexSE3* add_landmark(int l_idx, Eigen::Isometry3d& x){
 		// only adds vertex
 		g2o::VertexSE3* v = dynamic_cast<g2o::VertexSE3*>(_opt.vertex(1 + l_idx));
+		//ROS_INFO_STREAM(x.matrix());
 
 		if(!estimates[l_idx].seen){
 			// initialize with guess
@@ -406,7 +438,7 @@ class Slam{
 		}
 	}
 
-	bool set_dh(const std::vector<float>& src){
+	bool set_dh(const std::vector<float>& src, float noise){
 		int n = src.size();
 
 		if(! (n%4 == 0)){
@@ -414,10 +446,14 @@ class Slam{
 			return false;
 		}
 
+		if(noise > 0){
+			n_dist.param(std::normal_distribution<double>::param_type(0, _noise));
+		}
+
 		this->_dh.clear();
 		for(int i0=0; i0<n; i0+=4){
 			DH dh_i{src[i0], src[i0+1], src[i0+2], src[i0+3]};
-			if(this->_noise > 0){
+			if(noise > 0){
 				dh_i.alpha += n_dist(r_gen);
 				dh_i.a     += n_dist(r_gen);
 				dh_i.d     += n_dist(r_gen);

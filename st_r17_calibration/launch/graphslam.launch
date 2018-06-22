@@ -6,7 +6,6 @@
 	<arg name="batch_size" default="512"/>
 	<arg name="max_iter" default="1000"/>
 
-	<!--
     <node name="graphslam" pkg="st_r17_calibration" type="graphslam_ros.py"
         output="screen"
         >
@@ -17,11 +16,10 @@
         <rosparam command="load" file="$(find st_r17_calibration)/config/dh.yaml"/>
         <remap from="joint_states" to="/st_r17/joint_states"/>
     </node>
-	-->
 
+	<!--
 	<rosparam param="joints">["waist", "shoulder", "elbow", "hand", "wrist"]</rosparam>
 	<rosparam command="load" file="$(find st_r17_calibration)/config/dh.yaml"/>
-
     <node name="slam" pkg="st_r17_calibration" type="slam"
 		output="screen"
         >
@@ -30,11 +28,8 @@
 		<param name="batch_size" value="$(arg batch_size)"/>
 		<param name="max_iter" value="$(arg max_iter)"/>
 		<param name="verbose" value="true"/>
-		<!--
-        <param name="noise" value="$(arg noise)"/>
-        <param name="slop" value="$(arg slop)"/>
-		<param name="marquardt" value="$(arg marquardt)"/>
-		-->
         <remap from="joint_states" to="/st_r17/joint_states"/>
     </node>
+	-->
+
 </launch>
