@@ -52,6 +52,7 @@ class GraphSlamROS(object):
         self._tfl = tf.TransformListener()
 
         self._num_markers = rospy.get_param('~num_markers', default=4)
+        self._batch_size  = rospy.get_param('~batch_size', default=64)
         self._noise = rospy.get_param('~noise', default=0.01)
         self._slop = rospy.get_param('~slop', default=0.01)
         self._marquardt = rospy.get_param('~marquardt', default=0.01)
@@ -82,8 +83,10 @@ class GraphSlamROS(object):
         self._graph = deque(maxlen=1000)
         self._zinit = False
         self._z_nodes = [[] for _ in range(self._num_markers)]
-        self._slam = GraphSlam3(n_l=self._num_markers,
-                l=self._marquardt)
+        self._slam = GraphSlam3(
+                n_fix=1+self._num_markers,
+                n_dyn=self._batch_size,
+                lev=self._marquardt)
 
         # default observation fisher information
         # TODO : configure, currently just a guess
@@ -144,11 +147,14 @@ class GraphSlamROS(object):
             # save previous pose and don't proceed
             self._p = p
             self._q = q
-            self._slam.initialize(np.concatenate([p,q], axis=0))
+            #self._slam.initialize(np.concatenate([p,q], axis=0))
             self._initialized = True
             return
 
         # form observations ...
+        # nodes organized as:
+        # [base_link, landmarks{0..m-1}, poses{0..p-1}]
+
         zs = []
         try:
             for pm in detection_msgs.detections:
@@ -171,40 +177,42 @@ class GraphSlamROS(object):
                 if zi >= self._num_markers:
                     continue
                 self._i2m[zi] = m_id
-                zs.append([1, 2+zi, dz, self._omega.copy()])
+                zs.append([zi, dz, self._omega.copy()])
         except Exception as e:
             rospy.logerr_throttle(1.0, 'TF Failed : {}'.format(e))
             return
 
         ### semi-offline batch optimization
         ox = 1.0 * self._omega
-
         self._graph.append([p, q, zs])
-        if len(self._graph) >= 128:
+        if len(self._graph) >= self._batch_size:
             n_poses = 1 + len(self._graph) # add 1 for 0-node constraint
             nodes = []
             edges = []
+            p_nodes = []
             z_nodes = [[] for _ in range(self._num_markers)]
 
             # add 0-node
             nodes.append( np.asarray([0,0,0, 0,0,0,1]) )
 
-            for g in self._graph:
-                xi = len(nodes) # current pose index
+            for gi, g in enumerate(self._graph):
+                xi = 1 + self._num_markers + gi # current pose index
 
+                # pose info
                 gp, gq, gz = g
                 gx = np.concatenate([gp,gq], axis=0)
-                nodes.append(gx)
+                p_nodes.append(gx)
+
                 edges.append([0, xi, gx, ox])
-                # TODO : handle scenarios when a landmark
-                # didn't appear in 200 observations
-                for _, zi, dz, zo in gz:
-                    zi_ = n_poses + (zi-2) # re-computed landmark index
-                    edges.append([xi,zi_,dz,zo])
-                    # compute absolute position to start from good-ish mean
-                    #if not self._zinit:
+                # TODO : handle scenarios when a landmark didn't appear in 200 observations
+
+                for zi, dz, zo in gz:
+                    # edge from motion index to re-computed landmark index
+                    edges.append([xi,1+zi,dz,zo])
                     zp_a, zq_a = qmath.x2pq(qmath.xadd_rel(gx, dz, T=False))
-                    z_nodes[zi-2].append([zp_a, zq_a])
+                    z_nodes[zi].append([zp_a, zq_a])
+
+            # add landmark nodes
             if self._zinit:
                 # use the previous initialization for landmarks
                 for zp, zq in self._z_nodes:
@@ -218,21 +226,25 @@ class GraphSlamROS(object):
                     zq   = qmath.qmean(zq)
                     zx   = np.concatenate([zp,zq], axis=0)
                     nodes.append(zx)
-                lms = nodes[-self._num_markers:]
+                lms = nodes[1:1+self._num_markers]
                 lms = [qmath.x2pq(x) for x in lms]
                 self._pub_ze.publish(msgn(lms,rospy.Time.now())) 
+                self._zinit = True
 
-            self._zinit = True
+            # add motion nodes
+            for zx in p_nodes:
+                nodes.append(zx)
+
             #print "PRE:"
             #print nodes[-self._num_markers:]
-            nodes = self._slam.optimize(nodes, edges, n_iter=100, tol=1e-12, min_iter=100)
+            nodes = self._slam.optimize(nodes, edges, max_iter=100, tol=1e-12, min_iter=100)
             #print "POST:"
             #print nodes[-self._num_markers:]
 
-            self._z_nodes = [qmath.x2pq(x) for x in nodes[-self._num_markers:]]
-            lms = nodes[-self._num_markers:]
+            lms = nodes[1:1+self._num_markers] # landmarks
             lms = [qmath.x2pq(x) for x in lms]
-            self._pub_ze.publish(msgn(lms,rospy.Time.now())) 
+            self._z_nodes = lms
+            self._pub_ze.publish(msgn(self._z_nodes,rospy.Time.now())) 
             self._graph.clear()
 
             stamp = rospy.Time.now()

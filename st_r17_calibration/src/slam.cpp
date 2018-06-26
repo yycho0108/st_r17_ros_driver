@@ -118,6 +118,7 @@ class Slam{
 	int _batch_size;
 	float _tol;
 	bool _initialized;
+	bool _has_edge_info;
 	int _max_iter;
 	std::vector<DH> _dh;
 	std::vector<std::string> _joints;
@@ -152,6 +153,7 @@ class Slam{
   public:
 	Slam(ros::NodeHandle& nh):
 		_nh(nh), _tfl(_nh), _sync(MySyncPolicy(20), _j_sub, _d_sub){
+			_has_edge_info = false;
 			
 			// load parameters		
 			ros::param::param<int>("~num_markers", _num_markers, 4);
@@ -261,6 +263,7 @@ class Slam{
 			int steps = _opt.optimize(this->_max_iter, false); // see if online=true will work
 			if(steps > 0){
 				ROS_INFO("Took %d steps", steps);
+				this->_has_edge_info = true;
 			}else{
 				ROS_WARN("Optimization Failed");
 			}
@@ -275,6 +278,39 @@ class Slam{
 	}
 
 	void reset(){
+		if(this->_has_edge_info){
+			// perform marginalization + assignment
+			std::vector<g2o::OptimizableGraph::Vertex*> mVs;
+			for(int i=0; i< 1+_num_markers; ++i){
+				mVs.push_back(_opt.vertex(i));
+			}
+			g2o::SparseBlockMatrixXd spinv;
+			_opt.computeMarginals(spinv, mVs);
+			ROS_INFO_STREAM("Marginals : " << spinv);
+		}else{
+			// initialize containers ...
+			estimates.resize(_num_markers);
+
+			// add base_link vertex
+			auto v0 = new g2o::VertexSE3();
+			Eigen::Quaterniond q(1.0,0.0,0.0,0.0); //wxyz
+			Eigen::Vector3d t(0,0,0);
+			v0->setEstimate(g2o::SE3Quat(q,t));
+			v0->setFixed(true);
+			v0->setId(0);
+			_opt.addVertex(v0);
+
+			// landmarks (initialized with guesses if estimates exist)
+			for(int i=0; i<_num_markers;++i){
+				auto v = new g2o::VertexSE3();
+				v->setId(1+i);
+				if(estimates[i].seen){
+					v->setEstimate(estimates[i].value);
+				}
+				_opt.addVertex(v);
+			}
+			this->_m_idx = 1; //current motion index
+		}
 
 		//if(estimates.size() <= 0){
 		//	// == first initialization
@@ -304,32 +340,30 @@ class Slam{
 		//	}
 		//}
 
-		// initialize containers ...
-		estimates.resize(_num_markers);
 
-		_opt.clear(); // automatically deletes all vertices/edges
-		// TODO : investigate if other side-effects exist
+		//_opt.clear(); // automatically deletes all vertices/edges
+		//// TODO : investigate if other side-effects exist
 
-		// add base_link vertex
-		auto v0 = new g2o::VertexSE3();
-		Eigen::Quaterniond q(1.0,0.0,0.0,0.0); //wxyz
-		Eigen::Vector3d t(0,0,0);
-		v0->setEstimate(g2o::SE3Quat(q,t));
-		v0->setFixed(true);
-		v0->setId(0);
-		_opt.addVertex(v0);
+		//// add base_link vertex
+		//auto v0 = new g2o::VertexSE3();
+		//Eigen::Quaterniond q(1.0,0.0,0.0,0.0); //wxyz
+		//Eigen::Vector3d t(0,0,0);
+		//v0->setEstimate(g2o::SE3Quat(q,t));
+		//v0->setFixed(true);
+		//v0->setId(0);
+		//_opt.addVertex(v0);
 
-		// landmarks (initialized with guesses if estimates exist)
-		for(int i=0; i<_num_markers;++i){
-			auto v = new g2o::VertexSE3();
-			v->setId(1+i);
-			if(estimates[i].seen){
-				v->setEstimate(estimates[i].value);
-			}
-			_opt.addVertex(v);
-		}
+		//// landmarks (initialized with guesses if estimates exist)
+		//for(int i=0; i<_num_markers;++i){
+		//	auto v = new g2o::VertexSE3();
+		//	v->setId(1+i);
+		//	if(estimates[i].seen){
+		//		v->setEstimate(estimates[i].value);
+		//	}
+		//	_opt.addVertex(v);
+		//}
 
-		this->_m_idx = 1; //current motion index
+		//this->_m_idx = 1; //current motion index
 	}
 
 	g2o::VertexSE3* add_motion(Eigen::Isometry3d& x){

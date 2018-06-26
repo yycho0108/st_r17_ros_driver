@@ -13,6 +13,7 @@
         <param name="noise" value="$(arg noise)"/>
         <param name="slop" value="$(arg slop)"/>
 		<param name="marquardt" value="$(arg marquardt)"/>
+		<param name="batch_size" value="$(arg batch_size)"/>
         <rosparam command="load" file="$(find st_r17_calibration)/config/dh.yaml"/>
         <remap from="joint_states" to="/st_r17/joint_states"/>
     </node>
