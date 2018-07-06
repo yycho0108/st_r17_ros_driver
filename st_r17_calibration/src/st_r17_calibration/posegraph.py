@@ -46,13 +46,14 @@ class PoseGraph(object):
         # 0 ) load information
         H = self._H
         b = self._b
+        n = len(H)
         
         # 1 ) rearrange array so that H00 is to be marginalized
 
         # 1.1 ) construct index array forwards/backwards
         idx = np.arange(self._size, dtype=np.int32)
-        ix0 = (i0 <= idx) & (idx < i1)
-        ix1 = np.logical_not(ix0)
+        ix1 = (i0 <= idx) & (idx < i1) # i0:i1 are to be erased
+        ix0 = np.logical_not(ix1) # outside of that are to be preserved
         idx_fw = np.concatenate([idx[ix0], idx[ix1]])
         idx_bw = np.empty(self._size, dtype=np.int32)
         idx_bw[idx_fw] = idx
@@ -63,7 +64,7 @@ class PoseGraph(object):
         b = b[idx_fw]
 
         # 2 ) extract block submatrices
-        n0 = i1 - i0
+        n0 = n - (i1 - i0)
         H00 = b2d(H[:n0,:n0])
         H01 = b2d(H[:n0,n0:])
         H10 = b2d(H[n0:,:n0])
@@ -73,30 +74,30 @@ class PoseGraph(object):
 
         # 3) fold previous information into new matrix
         # through schur complement
-        H10_H00i = np.matmul(H10, np.linalg.pinv(H00))
-        H = H11 - np.matmul(H10_H00i, H01)
-        b = b10 - np.matmul(H10_H00i, b00)
+        #H10_H00i = np.matmul(H10, np.linalg.pinv(H00))
+        #H = H11 - np.matmul(H10_H00i, H01)
+        #b = b10 - np.matmul(H10_H00i, b00)
+
+        H01_H11i  = np.matmul(H01, np.linalg.pinv(H11))
+        H = H00 - np.matmul(H01_H11i, H10)
+        b = b00 - np.matmul(H01_H11i, b10)
 
         # 4) back to original view
-        # TODO : fix here ##################################################
         H = d2b(H, (6,6))
         b = d2b(b, (6,1))
-        H = H[idx_bw, :]
-        H = H[:, idx_bw]
-        b = b[idx_bw]
 
-        # 5) zero out prior information
-        H[ix0, :] *= 0
-        H[:, ix0] *= 0
-        b[ix0]    *= 0
-
-        # 6) save information
-        self._H = H
-        self._b = b
+        # save information
+        self._H *= 0 # zero out priors
+        self._b *= 0
+        ix0_arr = np.logical_and(ix0[:,np.newaxis], ix0[np.newaxis,:])
+        self._H[ix0_arr] = H.reshape(-1,6,6) # set information
+        self._b[ix0] = b
 
         # 7) delete node information
         for i in range(i0, i1):
             del self._nodes[i]
+        print self._H[1,1]
+        #print b
 
     def del_edge(self, i0, i1):
         del self._edges[ (i0, i1) ]
@@ -131,13 +132,13 @@ class PoseGraph(object):
         for it in range(max_iter):
             #H = np.zeros_like(self._H)
             #b = np.zeros_like(self._b)
-            H = self._H
-            b = self._b
+            H = self._H.copy()
+            b = self._b.copy()
 
-            for (i0,i1), (ev,eo) in self._edges.iteritems():
+            for (i0,i1), (ev,eo) in edges.iteritems():
                 # unpack information ...
-                p0, q0 = qm.x2pq(self._nodes[i0])
-                p1, q1 = qm.x2pq(self._nodes[i1])
+                p0, q0 = qm.x2pq(nodes[i0])
+                p1, q1 = qm.x2pq(nodes[i1])
                 dp, dq = qm.x2pq(ev)
 
                 # compute error ...
@@ -152,14 +153,16 @@ class PoseGraph(object):
                 b[i1]   += Bij.T.dot(eo).dot(eij)
 
             # fix node 0; TODO : valid?
-            H[0,0] += 1e3 * np.eye(6,6)
-            b[0] = 0
+            #H[0,0] += 1e6 * np.eye(6,6)
+            #b[0] = 0
 
             H = b2d(H)
             b = b2d(b)
             #mI = self._lambda * np.eye(*H.shape) # marquardt damping
             mI = np.diag(np.diag(H)) * lev
+            mI[:6,:6] += 1e9 * np.eye(6,6)
             #dx = np.linalg.lstsq(H+mI,-b, rcond=None)[0]
+            #print (H+mI)[0:6,0:6]
             dx = scipy.linalg.cho_solve(
                     scipy.linalg.cho_factor(H+mI), -b)
             dx = np.reshape(dx, [-1,6]) # [x1, l0, ... ln]

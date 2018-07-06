@@ -100,7 +100,7 @@ class GraphSlamROS(object):
         #self._omega = np.eye(6)
 
         self._pub_ee = rospy.Publisher('end_effector_est', PoseStamped, queue_size=10)
-        self._pub_ze = rospy.Publisher('landmark_est', PoseArray, queue_size=10)
+        self._pub_ze = rospy.Publisher('base_to_target_viz', PoseArray, queue_size=10)
         self._gt_pub = rospy.Publisher('/base_to_target', AprilTagDetectionArray, queue_size=10)
         self._dh_sub = rospy.Subscriber('/dh_params', DH, self.dh_cb)
 
@@ -228,7 +228,8 @@ class GraphSlamROS(object):
                     nodes.append(zx)
                 lms = nodes[1:1+self._num_markers]
                 lms = [qmath.x2pq(x) for x in lms]
-                self._pub_ze.publish(msgn(lms,rospy.Time.now())) 
+                lms_re = [lms[self._m2i[i]] for i in range(self._num_markers)]
+                self._pub_ze.publish(msgn(lms_re,rospy.Time.now())) 
                 self._zinit = True
 
             # add motion nodes
@@ -244,7 +245,8 @@ class GraphSlamROS(object):
             lms = nodes[1:1+self._num_markers] # landmarks
             lms = [qmath.x2pq(x) for x in lms]
             self._z_nodes = lms
-            self._pub_ze.publish(msgn(self._z_nodes,rospy.Time.now())) 
+            lms_re = [lms[self._m2i[i]] for i in range(self._num_markers)]
+            self._pub_ze.publish(msgn(lms_re,rospy.Time.now())) 
             self._graph.clear()
 
             stamp = rospy.Time.now()
