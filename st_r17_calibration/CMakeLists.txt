@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(st_r17_calibration)
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules/)
+link_directories(/usr/local/lib)
 
 
 ## Compile as C++11, supported in ROS Kinetic and newer
@@ -20,6 +21,8 @@ find_package(catkin REQUIRED COMPONENTS
 	moveit_ros_planning_interface
 	moveit_core
     )
+#message("G2O : ${G2O_INCLUDE_DIR}")
+
 find_package(Eigen3 REQUIRED)
 find_package(CSparse REQUIRED)
 find_package(Cholmod REQUIRED)
@@ -162,7 +165,6 @@ catkin_package(
 include_directories(
     # include
     ${catkin_INCLUDE_DIRS}
-
 	${EIGEN3_INCLUDE_DIR}
 	${CSPARSE_INCLUDE_DIR}
 	${Cholmod_INCLUDE_DIR}
@@ -192,9 +194,10 @@ target_link_libraries(scouter
 
 add_executable(slam src/slam.cpp)
 target_link_libraries(slam
+    ${G2O_LIBS}
 	${catkin_LIBRARIES}
-	${G2O_LIBS}
 	)
+
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use

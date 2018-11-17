@@ -73,13 +73,14 @@ void cvtJ_i(std::vector<double>& j){
 }
 
 void STR17Interface::read(const ros::Time& time){
+    ROS_INFO_THROTTLE(1.0, "READ");
 	//alias with reference
 	std::vector<double> loc;
 	
 	// ##### MUTEX #####
-	mtx.lock();	
+	//mtx.lock();	
 	st.where(loc);
-	mtx.unlock();
+	//mtx.unlock();
 
 	if(loc.size() != 5){
 		std::cerr << "WARNING :: INVALID LOCATION READ !!! " << std::endl;
@@ -99,6 +100,7 @@ void STR17Interface::read(const ros::Time& time){
 }
 
 void STR17Interface::write(const ros::Time& time){
+    ROS_INFO_THROTTLE(1.0, "WRITE");
 	//st.move ... joints
 	// info to st-r17, i.e. desired joint states
 	std::vector<double> cmd_pos(N_JOINTS);
@@ -109,7 +111,7 @@ void STR17Interface::write(const ros::Time& time){
 	cvtJ_i(cmd_pos); // invert conversion
 
 	// ##### MUTEX #####
-	mtx.lock();
+	//mtx.lock();
     auto move_flag=false;
     for(int i=0; i<N_JOINTS; ++i){
         float dp = fabs(cmd[i] - pos[i]);
@@ -127,7 +129,7 @@ void STR17Interface::write(const ros::Time& time){
 	//		st.move(joints[i], cmd_pos[i]);
 	//	}
 	//}
-	mtx.unlock();
+	//mtx.unlock();
 	// #################
 };
 
@@ -155,6 +157,7 @@ int main(int argc, char* argv[]){
 
 	ros::Time then = st_r17.get_time();
 	ros::Rate r = ros::Rate(rate); // 10 Hz
+    ROS_INFO("Entering Loop ...");
 
 	while(ros::ok()){
         ROS_INFO_THROTTLE(5.0, "ALIVE");

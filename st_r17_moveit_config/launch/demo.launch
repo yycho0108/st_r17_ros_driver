@@ -46,8 +46,8 @@
 
     <!-- Setup Camera TFs -->
     <group unless="$(arg sim)">
-        <node pkg="tf" type="static_transform_publisher" args="0 0.0315 0 0 0 0 jaw_link camera_ros 100"/>
-        <node pkg="tf" type="static_transform_publisher" args="0 0 0 -1.57 0 -1.57 camera_ros camera 100"/><!-- optical -->
+        <node pkg="tf" type="static_transform_publisher" args="0 0.0315 0 0 0 0 jaw_link camera_ros 100" name="tf_jaw_to_camera"/>
+        <node pkg="tf" type="static_transform_publisher" args="0 0 0 -1.57 0 -1.57 camera_ros camera 100" name="tf_camera_optical"/><!-- optical -->
     </group>
 
 </launch>

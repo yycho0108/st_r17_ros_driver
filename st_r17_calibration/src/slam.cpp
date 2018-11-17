@@ -180,9 +180,16 @@ class Slam{
 			_initialized &= _nh.getParam("joints", _joints); // joint order
 
 			// initialize g2o
-			g2o::BlockSolver_6_3::LinearSolverType* linearSolver = new g2o::LinearSolverCholmod<g2o::BlockSolver_6_3::PoseMatrixType>();
-			g2o::BlockSolver_6_3* solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
-			g2o::OptimizationAlgorithmLevenberg* alg = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
+            
+			//g2o::BlockSolver_6_3::LinearSolverType* linearSolver = new g2o::LinearSolverCholmod<g2o::BlockSolver_6_3::PoseMatrixType>();
+            //g2o::BlockSolver_6_3* solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
+            //
+            std::unique_ptr<g2o::BlockSolver_6_3::LinearSolverType> linearSolver =
+                std::unique_ptr<g2o::BlockSolver_6_3::LinearSolverType>(new g2o::LinearSolverCholmod<g2o::BlockSolver_6_3::PoseMatrixType>());
+            std::unique_ptr<g2o::BlockSolver_6_3> solver_ptr =
+                std::unique_ptr<g2o::BlockSolver_6_3>(new g2o::BlockSolver_6_3(std::move(linearSolver)));
+			g2o::OptimizationAlgorithmLevenberg* alg = new g2o::OptimizationAlgorithmLevenberg(std::move(solver_ptr));
+
 			_opt.setAlgorithm(alg);
 			_opt.setVerbose(_verbose);
 			this->reset();
@@ -284,7 +291,7 @@ class Slam{
 			for(int i=0; i< 1+_num_markers; ++i){
 				mVs.push_back(_opt.vertex(i));
 			}
-			g2o::SparseBlockMatrixXd spinv;
+			g2o::SparseBlockMatrix<Eigen::MatrixXd> spinv;
 			_opt.computeMarginals(spinv, mVs);
 			ROS_INFO_STREAM("Marginals : " << spinv);
 		}else{
